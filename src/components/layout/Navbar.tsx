@@ -66,8 +66,8 @@ export const featureItems = [
     gradient: "from-rose-500 to-pink-600",
   },
   {
-  href: "/project-analyzer",
-  label: "Project Analyzer",
+  href: "/project-analyse",
+  label: "Project Analyse",
   icon: GitCompare,
   description: "Compare your resume projects against top real-world similar projects",
   gradient: "from-violet-500 to-indigo-500",
