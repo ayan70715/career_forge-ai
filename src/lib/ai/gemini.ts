@@ -143,10 +143,16 @@ export async function fetchAvailableModels(keyOverride?: string): Promise<string
   return finalModels;
 }
 
+// Tool definition for Google Search grounding
+export type GeminiTool =
+  | { googleSearch: Record<string, never> }
+  | { codeExecution: Record<string, never> };
+
 type GenerateOptions = {
   maxRetries?: number;
   retryDelay?: number;
   enableModelFallback?: boolean;
+  tools?: GeminiTool[]; // optional: pass [{ googleSearch: {} }] to enable grounding
 };
 
 function isRateLimitError(message: string): boolean {
@@ -212,7 +218,8 @@ function parseGeminiError(err: unknown): string {
 
 /**
  * Main function: generate content with conservative retries to avoid quota burn.
- * By default it sticks to the selected model and does not auto-fallback.
+ * Optionally pass `tools: [{ googleSearch: {} }]` to enable Google Search grounding
+ * for real-time web results. All existing callers without tools are unaffected.
  */
 export async function generateWithRetry(
   prompt: string,
@@ -224,6 +231,7 @@ export async function generateWithRetry(
   const maxRetries = options?.maxRetries ?? 1;
   const baseDelay = options?.retryDelay ?? 3000;
   const enableModelFallback = options?.enableModelFallback ?? false;
+  const tools = options?.tools;
   const selectedModel = getSelectedModel();
 
   // Default: only selected model. Optional fallback can be enabled by caller.
@@ -237,7 +245,12 @@ export async function generateWithRetry(
   for (const modelName of modelsToTry) {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const model = genAI.getGenerativeModel({ model: modelName });
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          // Only pass tools when provided — keeps existing calls identical
+          ...(tools && tools.length > 0 ? { tools } : {}),
+        });
+
         const result = await model.generateContent(prompt);
         return result.response.text();
       } catch (err: unknown) {
