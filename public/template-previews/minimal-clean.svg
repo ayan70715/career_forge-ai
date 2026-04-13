@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" role="img" aria-label="Minimal Clean template preview">
+  <rect width="960" height="720" fill="#f4f4f5"/>
+  <rect x="128" y="52" width="704" height="616" rx="4" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="480" y="110" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" fill="#111827" font-weight="700" letter-spacing="2">CANDIDATE NAME</text>
+  <rect x="290" y="132" width="380" height="9" rx="4" fill="#6b7280"/>
+  <line x1="192" y1="176" x2="768" y2="176" stroke="#a1a1aa" stroke-width="1.6"/>
+  <line x1="192" y1="286" x2="768" y2="286" stroke="#a1a1aa" stroke-width="1.6"/>
+  <line x1="192" y1="396" x2="768" y2="396" stroke="#a1a1aa" stroke-width="1.6"/>
+  <line x1="192" y1="506" x2="768" y2="506" stroke="#a1a1aa" stroke-width="1.6"/>
+  <rect x="210" y="196" width="540" height="9" fill="#e4e4e7"/>
+  <rect x="210" y="216" width="504" height="9" fill="#e4e4e7"/>
+  <rect x="210" y="236" width="528" height="9" fill="#e4e4e7"/>
+  <rect x="210" y="306" width="544" height="9" fill="#e4e4e7"/>
+  <rect x="210" y="326" width="518" height="9" fill="#e4e4e7"/>
+  <rect x="210" y="346" width="506" height="9" fill="#e4e4e7"/>
+  <rect x="210" y="416" width="544" height="9" fill="#e4e4e7"/>
+  <rect x="210" y="436" width="524" height="9" fill="#e4e4e7"/>
+  <rect x="210" y="456" width="498" height="9" fill="#e4e4e7"/>
+</svg>

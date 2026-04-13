@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" role="img" aria-label="Executive Premium template preview">
+  <rect width="960" height="720" fill="#f3f4f6"/>
+  <rect x="100" y="42" width="760" height="636" rx="8" fill="#fbfbfa" stroke="#d1d5db"/>
+  <rect x="120" y="62" width="720" height="114" fill="#112d4a"/>
+  <rect x="444" y="76" width="72" height="38" rx="2" fill="#c6ad77"/>
+  <text x="480" y="102" text-anchor="middle" font-family="Georgia, serif" font-size="20" fill="#20384f" font-weight="700">JP</text>
+  <text x="480" y="144" text-anchor="middle" font-family="Georgia, serif" font-size="52" fill="#d3bb89" font-weight="700">CANDIDATE</text>
+  <rect x="120" y="176" width="220" height="482" fill="#f3f3f1"/>
+  <line x1="340" y1="176" x2="340" y2="658" stroke="#c7c7c7" stroke-width="2"/>
+  <rect x="142" y="196" width="156" height="10" fill="#1f2937"/>
+  <rect x="142" y="220" width="176" height="8" fill="#9ca3af"/>
+  <rect x="142" y="238" width="168" height="8" fill="#9ca3af"/>
+  <rect x="142" y="256" width="170" height="8" fill="#9ca3af"/>
+  <rect x="142" y="304" width="156" height="10" fill="#1f2937"/>
+  <rect x="142" y="326" width="170" height="8" fill="#9ca3af"/>
+  <rect x="142" y="344" width="152" height="8" fill="#9ca3af"/>
+  <rect x="142" y="392" width="156" height="10" fill="#1f2937"/>
+  <rect x="142" y="416" width="168" height="8" fill="#9ca3af"/>
+  <rect x="142" y="434" width="146" height="8" fill="#9ca3af"/>
+  <rect x="362" y="196" width="164" height="10" fill="#1f2937"/>
+  <line x1="362" y1="216" x2="820" y2="216" stroke="#c8aa6d" stroke-width="2"/>
+  <rect x="362" y="232" width="438" height="9" fill="#d1d5db"/>
+  <rect x="362" y="250" width="420" height="9" fill="#d1d5db"/>
+  <rect x="362" y="268" width="440" height="9" fill="#d1d5db"/>
+  <rect x="362" y="302" width="214" height="10" fill="#1f2937"/>
+  <line x1="362" y1="322" x2="820" y2="322" stroke="#c8aa6d" stroke-width="2"/>
+  <rect x="362" y="338" width="440" height="9" fill="#d1d5db"/>
+  <rect x="362" y="356" width="420" height="9" fill="#d1d5db"/>
+  <rect x="362" y="374" width="444" height="9" fill="#d1d5db"/>
+  <rect x="362" y="408" width="198" height="10" fill="#1f2937"/>
+  <line x1="362" y1="428" x2="820" y2="428" stroke="#c8aa6d" stroke-width="2"/>
+  <rect x="362" y="444" width="438" height="9" fill="#d1d5db"/>
+  <rect x="362" y="462" width="426" height="9" fill="#d1d5db"/>
+  <rect x="362" y="480" width="440" height="9" fill="#d1d5db"/>
+</svg>
