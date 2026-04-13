@@ -15,7 +15,6 @@ import {
   Trophy,
 } from "lucide-react";
 import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
-import ReactMarkdown from "react-markdown";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,7 +36,6 @@ interface SimilarProject {
   stars: string;
   forks: string;
   techStack: string[];
-  visibility: "high" | "medium" | "low";
 }
 
 interface ResumeProject {
@@ -171,7 +169,7 @@ export default function ProjectAnalyzerPage() {
     setResult(null);
 
     try {
-      // Step 1: Extract projects from resume
+      // Step 1: Extract projects from resume (no grounding needed)
       setLoadingStep("Extracting projects from your resume...");
       const extractPrompt = `Extract all projects from this resume. For each project return its name, a brief description, and the tech stack used.
 
@@ -200,57 +198,67 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
         return;
       }
 
-      // Step 2: Search for similar projects and compare
-      setLoadingStep(`Found ${resumeProjects.length} project(s). Searching the web for similar projects...`);
+      // Step 2: Use Google Search grounding to find real similar projects
+      setLoadingStep(`Found ${resumeProjects.length} project(s). Searching the web for real similar projects...`);
 
       const projectListText = resumeProjects
         .map((p, i) => `${i + 1}. ${p.name}: ${p.description} (Tech: ${p.techStack.join(", ")})`)
         .join("\n");
 
-      const comparePrompt = `You are a senior software engineer and technical recruiter evaluating resume projects.
+      // This prompt uses Google Search grounding — Gemini will search the web
+      // to find real GitHub repos and projects, returning live star/fork counts and URLs
+      const searchPrompt = `Search the web and GitHub right now to find real, existing similar projects for each of the following resume projects. Use live search results to get accurate GitHub star counts, fork counts, and URLs.
 
-Given these projects from a candidate's resume:
+Resume projects to find matches for:
 ${projectListText}
 
-Do the following:
-1. For each resume project, find up to 3 real, well-known similar projects or tools available on the internet (GitHub repos, open source tools, or popular products). Prefer highly starred GitHub repos or widely known tools.
-2. Compare each resume project against those similar real-world projects.
+Instructions:
+- Search GitHub and the web for the top 2-3 most similar real projects for each resume project
+- Use actual search results — do NOT make up or estimate star/fork counts
+- Only include projects you found via search with real URLs
+- Then compare each resume project against its best match
 
 Respond ONLY in this JSON format (no markdown, no code blocks):
 {
   "similarProjects": [
     {
-      "name": "Project/Repo Name",
-      "url": "https://github.com/...",
+      "name": "Exact repo or project name",
+      "url": "https://github.com/owner/repo",
       "description": "What it does",
-      "stars": "e.g. 45k",
-      "forks": "e.g. 12k",
-      "techStack": ["tech1", "tech2"],
-      "visibility": "high"
+      "stars": "e.g. 45.2k",
+      "forks": "e.g. 12.1k",
+      "techStack": ["tech1", "tech2"]
     }
   ],
   "comparisons": [
     {
       "resumeProjectName": "Name from resume",
-      "matchedSimilarProject": "Name of the most similar real project",
+      "matchedSimilarProject": "Name of the best matching real project found",
       "uniquenessScore": <0-100>,
-      "scopeComparison": "One sentence comparing scope",
-      "featureOverlap": ["overlapping feature 1", "overlapping feature 2"],
-      "differentiators": ["what makes the resume project unique"],
-      "suggestions": ["actionable suggestion to strengthen the project"],
+      "scopeComparison": "One sentence comparing the scope of both projects",
+      "featureOverlap": ["shared feature 1", "shared feature 2"],
+      "differentiators": ["what makes the resume project unique or different"],
+      "suggestions": ["actionable suggestion to strengthen the project on a resume"],
       "verdict": "strong | competitive | needs-work"
     }
   ],
   "overallSummary": "2-3 sentence overall assessment of the candidate's projects vs real-world standards"
 }
 
-Scoring guide for uniquenessScore:
-- 80-100: Highly unique, strong differentiators
-- 50-79: Competitive but common
-- 0-49: Very similar to existing tools, needs differentiation`;
+Uniqueness score guide:
+- 80-100: Highly unique with strong differentiators
+- 50-79: Competitive but similar to existing tools
+- 0-49: Very common, needs more differentiation`;
 
-      setLoadingStep("Comparing with real-world projects...");
-      let compareText = (await generateWithRetry(comparePrompt)).trim();
+      setLoadingStep("Comparing with real-world projects from the web...");
+
+      // Key change: pass googleSearch tool to enable live web grounding
+      let compareText = (
+        await generateWithRetry(searchPrompt, {
+          tools: [{ googleSearch: {} }],
+        })
+      ).trim();
+
       compareText = compareText.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
       const compareData = JSON.parse(compareText) as Omit<ComparisonResult, "resumeProjects">;
 
@@ -281,7 +289,7 @@ Scoring guide for uniquenessScore:
       <PageHeader
         icon={GitCompare}
         title="Project Analyzer"
-        subtitle="Find top similar real-world projects from the internet and compare them against your resume projects"
+        subtitle="Find top similar real-world projects from the web and compare them against your resume projects"
         gradient="from-violet-500 to-indigo-500"
       />
 
@@ -299,7 +307,7 @@ Scoring guide for uniquenessScore:
               <div>
                 <h2 className="text-lg font-semibold">Resume Input</h2>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Upload or paste your resume. The AI will extract your projects, search for similar ones online, and compare them.
+                  Upload or paste your resume. The AI will extract your projects, search the web for real similar ones, and compare them live.
                 </p>
               </div>
 
@@ -358,6 +366,11 @@ Scoring guide for uniquenessScore:
                   {resumeReady ? "Ready" : "Pending"}
                 </Badge>
               </div>
+
+              {/* Grounding notice */}
+              <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-[11px] text-muted-foreground leading-relaxed">
+                🔍 Uses <span className="text-primary font-medium">Google Search grounding</span> to find real GitHub repos and projects with live star/fork counts. Requires Gemini 2.0 Flash or higher.
+              </div>
             </CardContent>
           </Card>
 
@@ -374,7 +387,7 @@ Scoring guide for uniquenessScore:
                       Analyze My Projects
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1 ml-10">
-                      {loading ? loadingStep : "AI will search & compare top similar projects from the web"}
+                      {loading ? loadingStep : "Searches the live web for real similar projects & compares"}
                     </p>
                   </div>
                   <Button
@@ -402,7 +415,7 @@ Scoring guide for uniquenessScore:
               <CardContent className="p-6 text-center space-y-3">
                 <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
                 <p className="text-sm font-medium">{loadingStep}</p>
-                <p className="text-xs text-muted-foreground">This may take 15–30 seconds</p>
+                <p className="text-xs text-muted-foreground">Searching the web — this may take 20–40 seconds</p>
               </CardContent>
             </Card>
           ) : result ? (
@@ -420,6 +433,7 @@ Scoring guide for uniquenessScore:
                     <Badge variant="outline" className="text-[10px]">{result.resumeProjects.length} Resume Projects</Badge>
                     <Badge variant="outline" className="text-[10px]">{result.similarProjects.length} Similar Projects Found</Badge>
                     <Badge variant="outline" className="text-[10px]">{result.comparisons.length} Comparisons</Badge>
+                    <Badge variant="success" className="text-[10px]">🔍 Live Web Search</Badge>
                   </div>
                 </CardContent>
               </Card>
@@ -437,12 +451,12 @@ Scoring guide for uniquenessScore:
                             <span className="text-xs font-semibold truncate">{proj.name}</span>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            {proj.stars && (
+                            {proj.stars && proj.stars !== "N/A" && (
                               <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                                 <Star className="h-3 w-3" />{proj.stars}
                               </span>
                             )}
-                            {proj.forks && (
+                            {proj.forks && proj.forks !== "N/A" && (
                               <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                                 <GitFork className="h-3 w-3" />{proj.forks}
                               </span>
@@ -563,7 +577,7 @@ Scoring guide for uniquenessScore:
                 </div>
                 <h3 className="text-lg font-semibold">Results will appear here</h3>
                 <p className="text-xs text-muted-foreground mt-2 max-w-60 mx-auto leading-relaxed">
-                  Upload your resume and run analysis to see how your projects compare to top real-world projects.
+                  Upload your resume and run analysis to see how your projects compare to top real-world projects found live on the web.
                 </p>
               </CardContent>
             </Card>
