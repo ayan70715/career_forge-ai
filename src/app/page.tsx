@@ -1,575 +1,314 @@
 "use client";
 
-import { useRef, useState } from "react";
-import {
-  GitCompare,
-  Loader2,
-  Upload,
-  X,
-  ExternalLink,
-  Star,
-  GitFork,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  Trophy,
-} from "lucide-react";
-import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
-import ReactMarkdown from "react-markdown";
+import Link from "next/link";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { PageHeader } from "@/components/shared/PageHeader";
 import {
-  extractTextFromSupportedResumeFile,
-  getSupportedResumeFileType,
-  MAX_RESUME_FILE_SIZE_BYTES,
-  type SupportedResumeFileType,
-} from "@/lib/resume/textExtraction";
+  FileText,
+  Sparkles,
+  ScanSearch,
+  ShieldCheck,
+  Mail,
+  Mic,
+  ArrowRight,
+  Zap,
+  Cpu,
+  BarChart3,
+  Shield,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BentoGrid } from "@/components/home/BentoGrid";
+import { BentoCard } from "@/components/home/BentoCard";
+import {
+  ResumePreview,
+  EnhancePreview,
+  ATSPreview,
+  ResumeVerifierPreview,
+  CVPreview,
+  InterviewPreview,
+} from "@/components/home/FeaturePreview";
 
-const FILE_SIZE_LIMIT_MB = Math.round(MAX_RESUME_FILE_SIZE_BYTES / (1024 * 1024));
+const fadeUp = {
+  hidden: { opacity: 0, y: 30 },
+  visible: { opacity: 1, y: 0 },
+};
 
-interface SimilarProject {
-  name: string;
-  url: string;
-  description: string;
-  stars: string;
-  forks: string;
-  techStack: string[];
-  visibility: "high" | "medium" | "low";
-}
-
-interface ResumeProject {
-  name: string;
-  description: string;
-  techStack: string[];
-}
-
-interface ComparisonResult {
-  resumeProjects: ResumeProject[];
-  similarProjects: SimilarProject[];
-  comparisons: {
-    resumeProjectName: string;
-    matchedSimilarProject: string;
-    uniquenessScore: number;
-    scopeComparison: string;
-    featureOverlap: string[];
-    differentiators: string[];
-    suggestions: string[];
-    verdict: "strong" | "competitive" | "needs-work";
-  }[];
-  overallSummary: string;
-}
-
-function sourceLabel(type: SupportedResumeFileType | "paste"): string {
-  if (type === "pdf") return "PDF";
-  if (type === "docx") return "DOCX";
-  if (type === "text") return "Text File";
-  return "Pasted Text";
-}
-
-function getVerdictConfig(verdict: "strong" | "competitive" | "needs-work") {
-  switch (verdict) {
-    case "strong":
-      return {
-        label: "Strong & Unique",
-        icon: <Trophy className="w-4 h-4 text-success" />,
-        color: "text-success",
-        bg: "bg-success/10 border-success/25",
-      };
-    case "competitive":
-      return {
-        label: "Competitive",
-        icon: <CheckCircle2 className="w-4 h-4 text-warning" />,
-        color: "text-warning",
-        bg: "bg-warning/10 border-warning/25",
-      };
-    case "needs-work":
-      return {
-        label: "Needs Differentiation",
-        icon: <AlertTriangle className="w-4 h-4 text-danger" />,
-        color: "text-danger",
-        bg: "bg-danger/10 border-danger/25",
-      };
-  }
-}
-
-export default function ProjectAnalyzerPage() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [resumeText, setResumeText] = useState("");
-  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
-  const [resumeSourceType, setResumeSourceType] = useState<SupportedResumeFileType | "paste">("paste");
-  const [extracting, setExtracting] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [result, setResult] = useState<ComparisonResult | null>(null);
-  const [loadingStep, setLoadingStep] = useState("");
-
-  const clearUpload = () => {
-    setResumeFileName(null);
-    setResumeSourceType("paste");
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setError("");
-    setExtracting(true);
-
-    if (file.size > MAX_RESUME_FILE_SIZE_BYTES) {
-      setError(`File too large. Max ${FILE_SIZE_LIMIT_MB}MB.`);
-      setExtracting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      return;
-    }
-
-    const supportedType = getSupportedResumeFileType(file);
-    if (!supportedType) {
-      setError("Unsupported file type. Please upload PDF, DOCX, or text files.");
-      setExtracting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      return;
-    }
-
-    try {
-      const extracted = await extractTextFromSupportedResumeFile(file);
-      if (!extracted.text.trim()) {
-        setError("Could not extract text. Try pasting manually.");
-        setResumeFileName(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        return;
-      }
-      setResumeFileName(file.name);
-      setResumeSourceType(extracted.type);
-      setResumeText(extracted.text);
-    } catch {
-      setError("Failed to read file. Try another file or paste manually.");
-      setResumeFileName(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    } finally {
-      setExtracting(false);
-    }
-  };
-
-  const analyze = async () => {
-    const key = getApiKey();
-    if (!key) {
-      setError("Please configure your Gemini API key in Settings first.");
-      return;
-    }
-    if (!resumeText.trim()) {
-      setError("Please upload your resume or paste resume text.");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    setResult(null);
-
-    try {
-      // Step 1: Extract projects from resume
-      setLoadingStep("Extracting projects from your resume...");
-      const extractPrompt = `Extract all projects from this resume. For each project return its name, a brief description, and the tech stack used.
-
-RESUME:
-${resumeText}
-
-Respond ONLY in this JSON format (no markdown, no code blocks):
-{
-  "projects": [
-    {
-      "name": "Project Name",
-      "description": "Brief description of what it does",
-      "techStack": ["tech1", "tech2"]
-    }
-  ]
-}`;
-
-      let extractText = (await generateWithRetry(extractPrompt)).trim();
-      extractText = extractText.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-      const extractedData = JSON.parse(extractText) as { projects: ResumeProject[] };
-      const resumeProjects = extractedData.projects || [];
-
-      if (resumeProjects.length === 0) {
-        setError("No projects found in your resume. Make sure your resume includes a Projects section.");
-        setLoading(false);
-        return;
-      }
-
-      // Step 2: Search for similar projects and compare
-      setLoadingStep(`Found ${resumeProjects.length} project(s). Searching the web for similar projects...`);
-
-      const projectListText = resumeProjects
-        .map((p, i) => `${i + 1}. ${p.name}: ${p.description} (Tech: ${p.techStack.join(", ")})`)
-        .join("\n");
-
-      const comparePrompt = `You are a senior software engineer and technical recruiter evaluating resume projects.
-
-Given these projects from a candidate's resume:
-${projectListText}
-
-Do the following:
-1. For each resume project, find up to 3 real, well-known similar projects or tools available on the internet (GitHub repos, open source tools, or popular products). Prefer highly starred GitHub repos or widely known tools.
-2. Compare each resume project against those similar real-world projects.
-
-Respond ONLY in this JSON format (no markdown, no code blocks):
-{
-  "similarProjects": [
-    {
-      "name": "Project/Repo Name",
-      "url": "https://github.com/...",
-      "description": "What it does",
-      "stars": "e.g. 45k",
-      "forks": "e.g. 12k",
-      "techStack": ["tech1", "tech2"],
-      "visibility": "high"
-    }
-  ],
-  "comparisons": [
-    {
-      "resumeProjectName": "Name from resume",
-      "matchedSimilarProject": "Name of the most similar real project",
-      "uniquenessScore": <0-100>,
-      "scopeComparison": "One sentence comparing scope",
-      "featureOverlap": ["overlapping feature 1", "overlapping feature 2"],
-      "differentiators": ["what makes the resume project unique"],
-      "suggestions": ["actionable suggestion to strengthen the project"],
-      "verdict": "strong | competitive | needs-work"
-    }
-  ],
-  "overallSummary": "2-3 sentence overall assessment of the candidate's projects vs real-world standards"
-}
-
-Scoring guide for uniquenessScore:
-- 80-100: Highly unique, strong differentiators
-- 50-79: Competitive but common
-- 0-49: Very similar to existing tools, needs differentiation`;
-
-      setLoadingStep("Comparing with real-world projects...");
-      let compareText = (await generateWithRetry(comparePrompt)).trim();
-      compareText = compareText.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-      const compareData = JSON.parse(compareText) as Omit<ComparisonResult, "resumeProjects">;
-
-      setResult({
-        resumeProjects,
-        similarProjects: compareData.similarProjects || [],
-        comparisons: compareData.comparisons || [],
-        overallSummary: compareData.overallSummary || "",
-      });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Analysis failed. Please try again.";
-      setError(message);
-    } finally {
-      setLoading(false);
-      setLoadingStep("");
-    }
-  };
-
-  const resumeReady = resumeText.trim().length > 0;
-
+export default function HomePage() {
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.4 }}
-      className="relative max-w-380 mx-auto pb-3"
-    >
-      <PageHeader
-        icon={GitCompare}
-        title="Project Analyzer"
-        subtitle="Find top similar real-world projects from the internet and compare them against your resume projects"
-        gradient="from-violet-500 to-indigo-500"
-      />
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+      {/* ── Hero ── */}
+      <section className="relative pt-16 pb-20 text-center">
+        {/* Radial glow orb */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] pointer-events-none opacity-40"
+          style={{
+            background: "radial-gradient(ellipse, rgba(139,92,246,0.15), transparent 70%)",
+          }}
+        />
 
-      {error && (
-        <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-xl px-4 py-3 mb-6 text-sm">
-          {error}
-        </div>
-      )}
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        {/* Left: Input */}
-        <section className="space-y-5">
-          <Card className="border-glass-border/80 bg-surface-1/95 shadow-[0_18px_40px_var(--shadow-heavy)]">
-            <CardContent className="p-6 space-y-5">
-              <div>
-                <h2 className="text-lg font-semibold">Resume Input</h2>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Upload or paste your resume. The AI will extract your projects, search for similar ones online, and compare them.
-                </p>
-              </div>
-
-              {/* Upload button */}
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={extracting}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all disabled:opacity-60"
-                >
-                  {extracting ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Extracting...</>
-                  ) : (
-                    <><Upload className="h-3.5 w-3.5" /> Upload Resume PDF or DOCX</>
-                  )}
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.docx,.txt,.text,.md"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  title="Upload resume"
-                />
-                {resumeFileName && (
-                  <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-success/10 border border-success/20 text-success">
-                    {resumeFileName}
-                    <button onClick={clearUpload} className="text-danger/70 hover:text-danger">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                <span className="text-[10px] text-muted-foreground">PDF, DOCX, TXT up to {FILE_SIZE_LIMIT_MB}MB</span>
-              </div>
-
-              {/* Textarea */}
-              <textarea
-                className="w-full min-h-[280px] resize-none rounded-xl border border-glass-border bg-surface-1/80 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-                placeholder="Paste your full resume text here, or upload a file above..."
-                value={resumeText}
-                onChange={(e) => {
-                  setResumeText(e.target.value);
-                  setResumeSourceType("paste");
-                  setResumeFileName(null);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-              />
-
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-muted-foreground">
-                  {resumeReady
-                    ? `${resumeText.split(/\s+/).filter(Boolean).length} words · ${sourceLabel(resumeSourceType)}`
-                    : "No resume loaded"}
-                </span>
-                <Badge variant={resumeReady ? "success" : "warning"} className="text-[10px]">
-                  {resumeReady ? "Ready" : "Pending"}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Launch button */}
-          <div className="sticky bottom-4 z-20">
-            <Card className="border-glass-border/80 bg-sticky-bg backdrop-blur-xl shadow-[0_14px_34px_var(--shadow-heavy)]">
-              <CardContent className="p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="text-sm font-semibold flex items-center gap-2">
-                      <div className="h-8 w-8 rounded-lg bg-linear-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
-                        <GitCompare className="h-3.5 w-3.5 text-white" />
-                      </div>
-                      Analyze My Projects
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-1 ml-10">
-                      {loading ? loadingStep : "AI will search & compare top similar projects from the web"}
-                    </p>
-                  </div>
-                  <Button
-                    onClick={analyze}
-                    disabled={loading || extracting || !resumeReady}
-                    variant="glow"
-                    className="gap-2 px-6 py-5 text-sm bg-linear-to-r from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 w-full sm:w-auto"
-                  >
-                    {loading ? (
-                      <><Loader2 className="h-4 w-4 animate-spin" /> Analyzing...</>
-                    ) : (
-                      <><GitCompare className="h-4 w-4" /> Run Analysis</>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="relative z-10"
+        >
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm text-primary mb-8 backdrop-blur-sm">
+            <Zap className="h-3.5 w-3.5" />
+            AI-Powered Career Toolkit
           </div>
-        </section>
 
-        {/* Right: Results */}
-        <aside className="space-y-4 xl:sticky xl:top-24 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto xl:pr-1 scrollbar-thin">
-          {loading ? (
-            <Card className="border-glass-border/80 bg-surface-1/95 min-h-60 flex items-center justify-center">
-              <CardContent className="p-6 text-center space-y-3">
-                <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-                <p className="text-sm font-medium">{loadingStep}</p>
-                <p className="text-xs text-muted-foreground">This may take 15–30 seconds</p>
-              </CardContent>
-            </Card>
-          ) : result ? (
-            <div className="space-y-4">
+          <h1 className="text-5xl font-bold tracking-tight mb-5 sm:text-6xl lg:text-7xl">
+            <span className="bg-linear-to-b from-white via-foreground to-muted-foreground bg-clip-text text-transparent">
+              Build your career
+            </span>
+            <br />
+            <span className="bg-linear-to-r from-primary via-violet-400 to-purple-300 bg-clip-text text-transparent">
+              with AI precision
+            </span>
+          </h1>
 
-              {/* Overall Summary */}
-              <Card className="border-glass-border/80 bg-surface-1/95 shadow-[0_20px_45px_var(--shadow-heavy)]">
-                <CardContent className="p-5 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <GitCompare className="h-4 w-4 text-primary" />
-                    <h3 className="text-sm font-semibold">Overall Assessment</h3>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
+            Generate stunning resumes, ace interviews, and optimize for ATS — all powered by advanced AI.
+            Your complete career toolkit in one place.
+          </p>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:gap-4 justify-center">
+            <Button asChild variant="glow" size="lg" className="gap-2 text-base">
+              <Link href="/resume-builder">
+                Start Building <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="text-base">
+              <Link href="/settings">Configure API Key</Link>
+            </Button>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* ── Bento Grid ── */}
+      <motion.section
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ staggerChildren: 0.08 }}
+        className="pb-20"
+      >
+        <BentoGrid className="lg:grid-rows-3">
+          {/* Resume Builder — large 2-col card */}
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="sm:col-span-2 lg:row-span-2">
+            <BentoCard href="/resume-builder" className="h-full">
+              <div className="p-6 h-full flex flex-col">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-linear-to-br from-violet-500 to-purple-600 shadow-[0_0_20px_rgba(139,92,246,0.3)]">
+                      <FileText className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors">
+                        Resume Builder
+                      </h3>
+                      <p className="text-xs text-muted-foreground">LaTeX-powered professional resumes</p>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{result.overallSummary}</p>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <Badge variant="outline" className="text-[10px]">{result.resumeProjects.length} Resume Projects</Badge>
-                    <Badge variant="outline" className="text-[10px]">{result.similarProjects.length} Similar Projects Found</Badge>
-                    <Badge variant="outline" className="text-[10px]">{result.comparisons.length} Comparisons</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Similar Projects Found */}
-              <Card className="border-glass-border/80 bg-surface-1/95">
-                <CardContent className="p-5 space-y-3">
-                  <h3 className="text-sm font-semibold">Top Similar Projects Found Online</h3>
-                  <div className="space-y-2">
-                    {result.similarProjects.map((proj, i) => (
-                      <div key={i} className="rounded-xl border border-glass-border bg-surface-2/70 p-3 space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Badge variant="outline" className="text-[10px] px-1.5 shrink-0">#{i + 1}</Badge>
-                            <span className="text-xs font-semibold truncate">{proj.name}</span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {proj.stars && (
-                              <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                <Star className="h-3 w-3" />{proj.stars}
-                              </span>
-                            )}
-                            {proj.forks && (
-                              <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                <GitFork className="h-3 w-3" />{proj.forks}
-                              </span>
-                            )}
-                            {proj.url && (
-                              <a href={proj.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80">
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground">{proj.description}</p>
-                        <div className="flex flex-wrap gap-1">
-                          {proj.techStack.map((tech) => (
-                            <Badge key={tech} variant="outline" className="text-[10px] px-1.5">{tech}</Badge>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Per-project comparisons */}
-              {result.comparisons.map((comp, i) => {
-                const verdictConfig = getVerdictConfig(comp.verdict);
-                return (
-                  <Card key={i} className="border-glass-border/80 bg-surface-1/95">
-                    <CardContent className="p-5 space-y-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <h3 className="text-sm font-semibold">{comp.resumeProjectName}</h3>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">vs. {comp.matchedSimilarProject}</p>
-                        </div>
-                        <div className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium ${verdictConfig.bg} ${verdictConfig.color}`}>
-                          {verdictConfig.icon}
-                          {verdictConfig.label}
-                        </div>
-                      </div>
-
-                      {/* Uniqueness score */}
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-muted-foreground">Uniqueness Score</span>
-                          <span className={`text-xs font-bold ${comp.uniquenessScore >= 80 ? "text-success" : comp.uniquenessScore >= 50 ? "text-warning" : "text-danger"}`}>
-                            {comp.uniquenessScore}/100
-                          </span>
-                        </div>
-                        <div className="h-2 rounded-full bg-surface-4 overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-500 ${comp.uniquenessScore >= 80 ? "bg-success" : comp.uniquenessScore >= 50 ? "bg-warning" : "bg-danger"}`}
-                            style={{ width: `${comp.uniquenessScore}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <p className="text-[11px] text-muted-foreground italic">{comp.scopeComparison}</p>
-
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        {/* Feature Overlap */}
-                        <div className="rounded-xl border border-warning/20 bg-warning/10 p-3">
-                          <div className="text-[10px] font-semibold text-warning mb-1.5 flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3" /> Feature Overlap
-                          </div>
-                          {comp.featureOverlap.length > 0 ? (
-                            <ul className="space-y-1">
-                              {comp.featureOverlap.map((f, j) => (
-                                <li key={j} className="text-[11px] text-muted-foreground">• {f}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-[11px] text-muted-foreground">None detected</p>
-                          )}
-                        </div>
-
-                        {/* Differentiators */}
-                        <div className="rounded-xl border border-success/20 bg-success/10 p-3">
-                          <div className="text-[10px] font-semibold text-success mb-1.5 flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3" /> Your Edge
-                          </div>
-                          {comp.differentiators.length > 0 ? (
-                            <ul className="space-y-1">
-                              {comp.differentiators.map((d, j) => (
-                                <li key={j} className="text-[11px] text-muted-foreground">• {d}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-[11px] text-muted-foreground">Not identified</p>
-                          )}
-                        </div>
-
-                        {/* Suggestions */}
-                        <div className="rounded-xl border border-primary/20 bg-primary/10 p-3">
-                          <div className="text-[10px] font-semibold text-primary mb-1.5 flex items-center gap-1">
-                            <XCircle className="h-3 w-3" /> Suggestions
-                          </div>
-                          {comp.suggestions.length > 0 ? (
-                            <ul className="space-y-1">
-                              {comp.suggestions.map((s, j) => (
-                                <li key={j} className="text-[11px] text-muted-foreground">{j + 1}. {s}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-[11px] text-muted-foreground">No suggestions</p>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          ) : (
-            <Card className="border-glass-border/80 bg-surface-1/95 min-h-90 flex items-center justify-center">
-              <CardContent className="p-6 text-center">
-                <div className="mx-auto h-14 w-14 rounded-2xl border border-glass-border bg-surface-2 flex items-center justify-center mb-4">
-                  <GitCompare className="h-7 w-7 opacity-30" />
+                  <span className="text-xs font-medium text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20">
+                    Most Popular
+                  </span>
                 </div>
-                <h3 className="text-lg font-semibold">Results will appear here</h3>
-                <p className="text-xs text-muted-foreground mt-2 max-w-60 mx-auto leading-relaxed">
-                  Upload your resume and run analysis to see how your projects compare to top real-world projects.
+                <div className="flex-1 mt-2">
+                  <ResumePreview />
+                </div>
+                <div className="mt-4 flex items-center gap-1 text-sm text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                  Build your resume <ArrowRight className="h-3.5 w-3.5" />
+                </div>
+              </div>
+            </BentoCard>
+          </motion.div>
+
+          {/* AI Enhance */}
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }}>
+            <BentoCard href="/ai-enhance" className="h-full">
+              <div className="p-5 h-full flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-amber-500 to-orange-600 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                    <Sparkles className="h-4 w-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground group-hover:text-amber-400 transition-colors">
+                    AI Enhance
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Multi-level AI improvements from basic grammar to complete rewrites
                 </p>
-              </CardContent>
-            </Card>
-          )}
-        </aside>
-      </div>
-    </motion.div>
+                <div className="flex-1">
+                  <EnhancePreview />
+                </div>
+              </div>
+            </BentoCard>
+          </motion.div>
+
+          {/* ATS Checker */}
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }}>
+            <BentoCard href="/ats-checker" className="h-full">
+              <div className="p-5 h-full flex flex-col items-center text-center">
+                <div className="flex items-center gap-3 mb-3 self-start">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-emerald-500 to-teal-600 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                    <ScanSearch className="h-4 w-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground group-hover:text-emerald-400 transition-colors">
+                    ATS Checker
+                  </h3>
+                </div>
+                <div className="flex-1 flex items-center justify-center">
+                  <ATSPreview />
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Score and optimize for ATS systems
+                </p>
+              </div>
+            </BentoCard>
+          </motion.div>
+
+          {/* Resume Verifier */}
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }}>
+            <BentoCard href="/resume-verifier" className="h-full">
+              <div className="p-5 h-full flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-indigo-500 to-sky-600 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+                    <ShieldCheck className="h-4 w-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground group-hover:text-indigo-400 transition-colors">
+                    Resume Verifier
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Adaptive interview-style checks for resume claims
+                </p>
+                <div className="flex-1">
+                  <ResumeVerifierPreview />
+                </div>
+              </div>
+            </BentoCard>
+          </motion.div>
+
+          {/* CV Generator */}
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }}>
+            <BentoCard href="/cv-generator" className="h-full">
+              <div className="p-5 h-full flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-cyan-500 to-blue-600 shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+                    <Mail className="h-4 w-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground group-hover:text-cyan-400 transition-colors">
+                    CV / Cover Letter
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Tailored cover letters & academic CVs
+                </p>
+                <div className="flex-1">
+                  <CVPreview />
+                </div>
+              </div>
+            </BentoCard>
+          </motion.div>
+
+          {/* Interview Prep */}
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }}>
+            <BentoCard href="/interview-prep" className="h-full">
+              <div className="p-5 h-full flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-rose-500 to-pink-600 shadow-[0_0_15px_rgba(244,63,94,0.2)]">
+                    <Mic className="h-4 w-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground group-hover:text-rose-400 transition-colors">
+                    Interview Prep
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Live AI interview with voice interaction
+                </p>
+                <div className="flex-1">
+                  <InterviewPreview />
+                </div>
+              </div>
+            </BentoCard>
+          </motion.div>
+
+          {/* Stat card: AI Tools */}
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }}>
+            <div className="h-full rounded-2xl border border-glass-border bg-glass-bg backdrop-blur-md p-5 flex flex-col items-center justify-center text-center">
+              <Cpu className="h-8 w-8 text-primary mb-3 opacity-60" />
+              <div className="text-3xl font-bold text-foreground mb-1">6</div>
+              <div className="text-sm text-muted-foreground">AI-Powered Tools</div>
+              <div className="text-xs text-muted-foreground mt-1">Gemini AI Engine</div>
+            </div>
+          </motion.div>
+        </BentoGrid>
+      </motion.section>
+
+      {/* ── Stats bar ── */}
+      <motion.section
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true }}
+        variants={fadeUp}
+        transition={{ duration: 0.5 }}
+        className="pb-20"
+      >
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[
+            { icon: Zap, label: "Real-time", desc: "Instant generation" },
+            { icon: Shield, label: "LaTeX Quality", desc: "Professional output" },
+            { icon: BarChart3, label: "ATS Optimized", desc: "Beat the bots" },
+            { icon: Cpu, label: "Gemini AI", desc: "Advanced engine" },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className="rounded-xl border border-glass-border bg-glass-bg backdrop-blur-md p-4 text-center transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(139,92,246,0.06)]"
+            >
+              <stat.icon className="h-5 w-5 text-primary mx-auto mb-2 opacity-70" />
+              <div className="text-sm font-medium text-foreground">{stat.label}</div>
+              <div className="text-xs text-muted-foreground">{stat.desc}</div>
+            </div>
+          ))}
+        </div>
+      </motion.section>
+
+      {/* ── Bottom CTA ── */}
+      <motion.section
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true }}
+        variants={fadeUp}
+        transition={{ duration: 0.5 }}
+        className="pb-16"
+      >
+        <div className="relative overflow-hidden rounded-2xl border border-glass-border bg-glass-bg backdrop-blur-md p-10 text-center">
+          {/* Glow accent */}
+          <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-primary/40 to-transparent" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] h-[200px] pointer-events-none opacity-30"
+            style={{
+              background: "radial-gradient(ellipse, rgba(139,92,246,0.2), transparent 70%)",
+            }}
+          />
+          <h2 className="relative text-2xl font-bold mb-3 sm:text-3xl">
+            Ready to get started?
+          </h2>
+          <p className="relative text-muted-foreground mb-6 max-w-md mx-auto">
+            Configure your API key and start building professional career materials with AI.
+          </p>
+          <div className="relative flex flex-col gap-3 sm:flex-row sm:gap-4 justify-center">
+            <Button asChild variant="glow" size="lg" className="gap-2">
+              <Link href="/resume-builder">
+                Build Your Resume <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="lg">
+              <Link href="/settings">Add API Key</Link>
+            </Button>
+          </div>
+        </div>
+      </motion.section>
+    </div>
   );
-}
+          }
