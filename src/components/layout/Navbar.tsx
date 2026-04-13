@@ -15,7 +15,9 @@ import {
   Menu,
   ChevronDown,
   ArrowRight,
+  GitCompare,
 } from "lucide-react";
+  
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { MobileNav } from "./MobileNav";
@@ -63,6 +65,13 @@ export const featureItems = [
     description: "Live AI interview simulation with voice",
     gradient: "from-rose-500 to-pink-600",
   },
+  {
+  href: "/project-analyzer",
+  label: "Project Analyzer",
+  icon: GitCompare,
+  description: "Compare your resume projects against top real-world similar projects",
+  gradient: "from-violet-500 to-indigo-500",
+},
 ];
 
 export const navItems = [
