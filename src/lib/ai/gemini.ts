@@ -247,8 +247,8 @@ export async function generateWithRetry(
       try {
         const model = genAI.getGenerativeModel({
           model: modelName,
-          // Only pass tools when provided — keeps existing calls identical
-          ...(tools && tools.length > 0 ? { tools } : {}),
+        // Only pass tools when provided — keeps existing calls identical
+          ...(tools && tools.length > 0 ? { tools: tools as never } : {}),
         });
 
         const result = await model.generateContent(prompt);
