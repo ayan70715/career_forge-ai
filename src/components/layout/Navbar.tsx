@@ -45,6 +45,13 @@ export const featureItems = [
     gradient: "from-emerald-500 to-teal-600",
   },
   {
+    href: "/project-analyse",
+    label: "Project Analyse",
+    icon: FolderSearch,
+    description: "Compare your resume projects against top real-world similar projects",
+    gradient: "from-fuchsia-500 to-indigo-600",
+  },
+  {
     href: "/resume-verifier",
     label: "Resume Verifier",
     icon: ShieldCheck,
@@ -65,13 +72,6 @@ export const featureItems = [
     description: "Live AI interview simulation with voice",
     gradient: "from-rose-500 to-pink-600",
   },
-  {
-  href: "/project-analyse",
-  label: "Project Analyse",
-  icon: FolderSearch,
-  description: "Compare your resume projects against top real-world similar projects",
-  gradient: "from-fuchsia-500 to-pink-600",
-},
 ];
 
 export const navItems = [
