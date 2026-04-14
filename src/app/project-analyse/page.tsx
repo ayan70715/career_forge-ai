@@ -29,6 +29,25 @@ import {
 
 const FILE_SIZE_LIMIT_MB = Math.round(MAX_RESUME_FILE_SIZE_BYTES / (1024 * 1024));
 
+// Well-known general-purpose libraries/frameworks/platforms that should never
+// be used as project comparisons — they are tools, not end-user applications.
+const BLOCKED_LIBRARY_NAMES = new Set([
+  "opencv", "tensorflow", "pytorch", "keras", "numpy", "pandas", "scikit-learn",
+  "sklearn", "scipy", "matplotlib", "flask", "django", "fastapi", "express",
+  "react", "vue", "angular", "svelte", "next.js", "nextjs", "node.js", "nodejs",
+  "spring", "spring boot", "hibernate", "rails", "ruby on rails", "laravel",
+  "wordpress", "woocommerce", "shopify", "magento", "drupal", "jquery",
+  "bootstrap", "tailwind", "tailwindcss", "mysql", "postgresql", "mongodb",
+  "sqlite", "redis", "elasticsearch", "kafka", "rabbitmq", "docker", "kubernetes",
+  "terraform", "ansible", "gradle", "maven", "webpack", "vite", "babel",
+  "hugging face", "huggingface", "langchain", "llamaindex", "llama-index",
+  "gradio", "streamlit", "astropy", "openemr",
+]);
+
+function isBlockedLibrary(name: string): boolean {
+  return BLOCKED_LIBRARY_NAMES.has(name.toLowerCase().trim());
+}
+
 interface SimilarProject {
   name: string;
   url: string;
@@ -99,7 +118,7 @@ function parseGitHubRepo(url: string): { owner: string; repo: string } | null {
     const { hostname, pathname } = new URL(url);
     if (!hostname.includes("github.com")) return null;
     const parts = pathname.replace(/^\//, "").split("/");
-    if (parts.length < 2) return null;
+    if (parts.length < 2 || !parts[0] || !parts[1]) return null;
     return { owner: parts[0], repo: parts[1].replace(/\.git$/, "") };
   } catch {
     return null;
@@ -112,34 +131,70 @@ function formatCount(n: number): string {
 }
 
 /**
- * Validate a single project URL:
- * - GitHub URLs: hit the GitHub REST API to confirm existence and fetch real star/fork counts
- * - Non-GitHub URLs: do a HEAD request to confirm reachability, keep Gemini's stats as-is
- * Returns the validated project or null if the URL is dead/fake.
+ * Check if a GitHub repo's name/description is reasonably consistent with
+ * what Gemini described. This catches cases where a real repo exists at the
+ * given path but is a completely different project than intended.
+ */
+function isRepoIdentityPlausible(
+  project: SimilarProject,
+  apiData: { name?: string; description?: string | null; topics?: string[] }
+): boolean {
+  const geminiName = project.name.toLowerCase().replace(/[-_\s]/g, "");
+  const repoName = (apiData.name || "").toLowerCase().replace(/[-_\s]/g, "");
+  const repoDesc = (apiData.description || "").toLowerCase();
+
+  // If repo name loosely matches what Gemini said, accept it
+  if (repoName && (geminiName.includes(repoName) || repoName.includes(geminiName))) {
+    return true;
+  }
+
+  // If the repo description contains keywords from Gemini's description, accept it
+  const geminiDescWords = project.description.toLowerCase().split(/\s+/).filter(w => w.length > 4);
+  const matchCount = geminiDescWords.filter(w => repoDesc.includes(w)).length;
+  if (geminiDescWords.length > 0 && matchCount / geminiDescWords.length >= 0.3) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Validate a single project:
+ * - Reject known general-purpose libraries/frameworks by name
+ * - GitHub URLs: validate via GitHub API, check repo identity, get real stats
+ * - Non-GitHub URLs: HEAD request to verify reachability
  */
 async function validateProject(project: SimilarProject): Promise<SimilarProject | null> {
+  // Reject well-known libraries/frameworks/platforms regardless of URL
+  if (isBlockedLibrary(project.name)) return null;
+
   const { url } = project;
   if (!url || !url.startsWith("http")) return null;
 
   const ghRepo = parseGitHubRepo(url);
 
   if (ghRepo) {
-    // GitHub URL — validate via API and pull real stats
     try {
       const res = await fetch(
         `https://api.github.com/repos/${ghRepo.owner}/${ghRepo.repo}`,
         { headers: { Accept: "application/vnd.github+json" } }
       );
-      if (!res.ok) return null; // 404 or other — drop hallucinated repo
+      if (!res.ok) return null; // 404 or error — drop it
 
       const data = await res.json() as {
+        name?: string;
+        description?: string | null;
+        topics?: string[];
         stargazers_count?: number;
         forks_count?: number;
       };
 
+      // Identity check — make sure this repo is actually what Gemini described
+      if (!isRepoIdentityPlausible(project, data)) return null;
+
       return {
         ...project,
-        // Replace Gemini's counts with real GitHub API values
+        // Always use real GitHub API counts, not Gemini's estimates
         stars: typeof data.stargazers_count === "number"
           ? formatCount(data.stargazers_count)
           : project.stars,
@@ -151,14 +206,12 @@ async function validateProject(project: SimilarProject): Promise<SimilarProject 
       return null;
     }
   } else {
-    // Non-GitHub URL — just verify it's reachable
+    // Non-GitHub — just verify reachability
     try {
-      // mode: "no-cors" gives an opaque response (status 0) if reachable,
-      // and throws if the network request fails entirely
       await fetch(url, { method: "HEAD", mode: "no-cors" });
-      return project; // Keep Gemini's stars/forks for non-GitHub sites
+      return project;
     } catch {
-      return null; // Unreachable — drop it
+      return null;
     }
   }
 }
@@ -245,7 +298,7 @@ export default function ProjectAnalyzerPage() {
     setResult(null);
 
     try {
-      // Step 1: Extract projects from resume (no grounding needed)
+      // Step 1: Extract projects from resume
       setLoadingStep("Extracting projects from your resume...");
       const extractPrompt = `Extract all projects from this resume. For each project return its name, a brief description, and the tech stack used.
 
@@ -286,22 +339,27 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
 Resume projects:
 ${projectListText}
 
-STRICT RULES — you MUST follow all of these:
-- Only include projects with a REAL, WORKING URL you found via search (GitHub repo, official site, npm, PyPI, etc.)
-- NEVER fabricate, guess, or construct a URL — only use URLs you actually found in live search results
-- NEVER include entries with placeholder names like "(example)", "(generic)", "(commercial)", "(sample)", or any vague category names
-- If you cannot find a real verifiable match for a resume project, set "matchedSimilarProject" to null for that comparison — do NOT invent a fake one
-- For GitHub URLs: use the exact full URL (e.g. https://github.com/owner/repo)
-- For non-GitHub projects: use the real verified homepage URL (official site, npm, PyPI, etc.)
-- Star/fork counts: provide your best estimate from search results for GitHub repos; for non-GitHub set to "N/A"
+STRICT RULES — you MUST follow ALL of these without exception:
+
+1. REAL URLS ONLY: Only include a project if you found its URL in live search results. Never fabricate, guess, or construct a URL.
+
+2. NO PLACEHOLDER NAMES: Never include entries with names like "(example)", "(generic)", "(commercial)", "(sample)", or vague category descriptions. Every entry must be a specific named project.
+
+3. NO LIBRARIES OR FRAMEWORKS: Never match a resume project against a general-purpose library, framework, platform, or infrastructure tool — even if the resume project uses that library internally. This includes but is not limited to: OpenCV, TensorFlow, PyTorch, Keras, NumPy, Pandas, Scikit-learn, Flask, Django, FastAPI, React, Vue, Angular, Next.js, Node.js, Spring, Rails, Laravel, WordPress, WooCommerce, Shopify, Bootstrap, Tailwind, MySQL, MongoDB, PostgreSQL, Redis, Docker, Kubernetes, HuggingFace, LangChain, Gradio, Streamlit, Astropy, OpenEMR. Match only against projects that solve the SAME END-USER PROBLEM as the resume project.
+
+4. SAME DOMAIN ONLY: The matched project must address the same real-world use case. For example: a skin disease detection web app should be matched against other medical image classification apps — NOT against OpenCV or TensorFlow. An e-commerce platform for crops should match against agricultural marketplaces — NOT against WooCommerce or Shopify.
+
+5. NULL IF NO MATCH: If you cannot find a real, specific, non-library project that genuinely solves the same problem, set "matchedSimilarProject" to null. Never invent a match.
+
+6. GITHUB URL FORMAT: Use exact full URLs like https://github.com/owner/repo. For non-GitHub projects use the real homepage URL.
 
 Respond ONLY in this JSON format (no markdown, no code blocks):
 {
   "similarProjects": [
     {
-      "name": "Exact repo or project name",
+      "name": "Exact project or repo name",
       "url": "https://real-verified-url.com",
-      "description": "What it does",
+      "description": "What end-user problem it solves",
       "stars": "e.g. 6.4k or N/A",
       "forks": "e.g. 1k or N/A",
       "techStack": ["tech1", "tech2"]
@@ -310,12 +368,12 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
   "comparisons": [
     {
       "resumeProjectName": "Name from resume",
-      "matchedSimilarProject": "Name of best real match found, or null if none",
+      "matchedSimilarProject": "Name of best real match, or null if none found",
       "uniquenessScore": <0-100>,
-      "scopeComparison": "One sentence comparing the scope of both projects",
-      "featureOverlap": ["shared feature 1", "shared feature 2"],
+      "scopeComparison": "One sentence comparing the end-user scope of both projects",
+      "featureOverlap": ["shared end-user feature 1", "shared end-user feature 2"],
       "differentiators": ["what makes the resume project unique"],
-      "suggestions": ["actionable suggestion to strengthen the project on a resume"],
+      "suggestions": ["actionable suggestion to strengthen this project on a resume"],
       "verdict": "strong | competitive | needs-work"
     }
   ],
@@ -324,7 +382,7 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
 
 Uniqueness score guide:
 - 80-100: Highly unique with strong differentiators
-- 50-79: Competitive but similar to existing tools
+- 50-79: Competitive but similar to existing solutions
 - 0-49: Very common, needs more differentiation`;
 
       setLoadingStep("Comparing with real-world projects from the web...");
@@ -338,14 +396,13 @@ Uniqueness score guide:
       compareText = compareText.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
       const compareData = JSON.parse(compareText) as Omit<ComparisonResult, "resumeProjects">;
 
-      // Step 3: Validate all URLs — drop hallucinated/dead ones, replace GitHub stats with real API data
+      // Step 3: Validate URLs — drop libraries by name, drop dead/wrong GitHub repos,
+      // replace GitHub stats with real API values
       setLoadingStep("Validating URLs and fetching real GitHub stats...");
       const validatedProjects = await validateAllProjects(compareData.similarProjects || []);
 
-      // Build set of validated project names for cross-referencing comparisons
       const validNames = new Set(validatedProjects.map((p) => p.name));
 
-      // Update comparisons: if matched project didn't survive validation, mark it clearly
       const validatedComparisons = (compareData.comparisons || []).map((comp) => {
         if (!comp.matchedSimilarProject || !validNames.has(comp.matchedSimilarProject)) {
           return { ...comp, matchedSimilarProject: "No verified match found" };
@@ -398,7 +455,7 @@ Uniqueness score guide:
               <div>
                 <h2 className="text-lg font-semibold">Resume Input</h2>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Upload or paste your resume. Projects are extracted, similar ones searched live on the web, every URL validated, and GitHub stats fetched from the real API.
+                  Upload or paste your resume. Projects are extracted, similar end-user applications searched live on the web, every URL validated, and GitHub stats fetched from the real API.
                 </p>
               </div>
 
@@ -457,10 +514,10 @@ Uniqueness score guide:
               </div>
 
               <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-[11px] text-muted-foreground leading-relaxed">
-                🔍 <span className="text-primary font-medium">Google Search grounding</span> finds real projects →
-                GitHub URLs are verified via the GitHub API with real star/fork counts →
-                Non-GitHub URLs verified for reachability →
-                Hallucinated or dead links are automatically dropped.
+                🔍 <span className="text-primary font-medium">Google Search grounding</span> finds real end-user projects →
+                Libraries & frameworks are blocked as matches →
+                GitHub repos verified via API with identity check →
+                Dead or mismatched links dropped automatically.
               </div>
             </CardContent>
           </Card>
@@ -477,7 +534,7 @@ Uniqueness score guide:
                       Analyze My Projects
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1 ml-10">
-                      {loading ? loadingStep : "Searches live web · Validates URLs · Fetches real GitHub stats"}
+                      {loading ? loadingStep : "Searches live web · Blocks libraries · Validates URLs · Real GitHub stats"}
                     </p>
                   </div>
                   <Button
