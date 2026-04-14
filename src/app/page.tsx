@@ -240,7 +240,7 @@ export default function HomePage() {
             <BentoCard href="/project-analyse" className="h-full">
               <div className="p-5 h-full flex flex-col">
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-fuchsia-500 to-pink-600 shadow-[0_0_15px_rgba(217,70,239,0.2)]">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-fuchsia-500 to-indigo-600 shadow-[0_0_15px_rgba(217,70,239,0.2)]">
                     <FolderSearch className="h-4 w-4 text-white" />
                   </div>
                   <h3 className="text-sm font-semibold text-foreground group-hover:text-fuchsia-400 transition-colors">
