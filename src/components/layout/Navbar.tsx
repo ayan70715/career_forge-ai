@@ -70,7 +70,7 @@ export const featureItems = [
   label: "Project Analyse",
   icon: FolderSearch,
   description: "Compare your resume projects against top real-world similar projects",
-  gradient: "from-violet-500 to-indigo-500",
+  gradient: "from-fuchsia-500 to-pink-600",
 },
 ];
 
