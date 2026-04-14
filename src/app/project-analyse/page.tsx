@@ -289,6 +289,7 @@ ${projectListText}
 STRICT RULES — you MUST follow all of these:
 - Only include projects with a REAL, WORKING URL you found via search (GitHub repo, official site, npm, PyPI, etc.)
 - NEVER fabricate, guess, or construct a URL — only use URLs you actually found in live search results
+- Only include repositories, projects and products, NEVER INCLUDE LIBRARY, DATASET OR ANYTHING THAT'S NOT A REAL COMPARABLE PRODUCT OR PROJECT.
 - NEVER include entries with placeholder names like "(example)", "(generic)", "(commercial)", "(sample)", or any vague category names
 - If you cannot find a real verifiable match for a resume project, set "matchedSimilarProject" to null for that comparison — do NOT invent a fake one
 - For GitHub URLs: use the exact full URL (e.g. https://github.com/owner/repo)
