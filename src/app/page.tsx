@@ -235,6 +235,7 @@ export default function HomePage() {
             </BentoCard>
           </motion.div>
 
+          {/* Project Analyse*/}
           <motion.div variants={fadeUp} transition={{ duration: 0.5 }}>
             <BentoCard href="/project-analyse" className="h-full">
               <div className="p-5 h-full flex flex-col">
