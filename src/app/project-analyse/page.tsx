@@ -381,7 +381,7 @@ Uniqueness score guide:
         icon={GitCompare}
         title="Project Analyzer"
         subtitle="Find top similar real-world projects from the web and compare them against your resume projects"
-        gradient="from-violet-500 to-indigo-500"
+        gradient="from-fuchsia-500 to-indigo-500"
       />
 
       {error && (
@@ -471,7 +471,7 @@ Uniqueness score guide:
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="text-sm font-semibold flex items-center gap-2">
-                      <div className="h-8 w-8 rounded-lg bg-linear-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
+                      <div className="h-8 w-8 rounded-lg bg-linear-to-br from-fuchsia-500 to-indigo-500 flex items-center justify-center">
                         <GitCompare className="h-3.5 w-3.5 text-white" />
                       </div>
                       Analyze My Projects
@@ -484,7 +484,7 @@ Uniqueness score guide:
                     onClick={analyze}
                     disabled={loading || extracting || !resumeReady}
                     variant="glow"
-                    className="gap-2 px-6 py-5 text-sm bg-linear-to-r from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 w-full sm:w-auto"
+                    className="gap-2 px-6 py-5 text-sm bg-linear-to-r from-fuchsia-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 w-full sm:w-auto"
                   >
                     {loading ? (
                       <><Loader2 className="h-4 w-4 animate-spin" /> Analyzing...</>
