@@ -14,6 +14,7 @@ import {
   Cpu,
   BarChart3,
   Shield,
+  FolderSearch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BentoGrid } from "@/components/home/BentoGrid";
@@ -234,11 +235,30 @@ export default function HomePage() {
             </BentoCard>
           </motion.div>
 
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }}>
+            <BentoCard href="/project-analyse" className="h-full">
+              <div className="p-5 h-full flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-fuchsia-500 to-pink-600 shadow-[0_0_15px_rgba(217,70,239,0.2)]">
+                    <FolderSearch className="h-4 w-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground group-hover:text-fuchsia-400 transition-colors">
+                    Project Analyser
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  AI-powered analysis of strength and uniqueness of your projects
+                </p>
+      {/* Optional: add a ProjectAnalysePreview component here */}
+              </div>
+            </BentoCard>
+          </motion.div>
+
           {/* Stat card: AI Tools */}
           <motion.div variants={fadeUp} transition={{ duration: 0.5 }}>
             <div className="h-full rounded-2xl border border-glass-border bg-glass-bg backdrop-blur-md p-5 flex flex-col items-center justify-center text-center">
               <Cpu className="h-8 w-8 text-primary mb-3 opacity-60" />
-              <div className="text-3xl font-bold text-foreground mb-1">6</div>
+              <div className="text-3xl font-bold text-foreground mb-1">7</div>
               <div className="text-sm text-muted-foreground">AI-Powered Tools</div>
               <div className="text-xs text-muted-foreground mt-1">Gemini AI Engine</div>
             </div>
