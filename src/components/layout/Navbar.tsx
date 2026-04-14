@@ -15,7 +15,7 @@ import {
   Menu,
   ChevronDown,
   ArrowRight,
-  GitCompare,
+  FolderSearch,
 } from "lucide-react";
   
 import { Button } from "@/components/ui/button";
@@ -68,7 +68,7 @@ export const featureItems = [
   {
   href: "/project-analyse",
   label: "Project Analyse",
-  icon: GitCompare,
+  icon: FolderSearch,
   description: "Compare your resume projects against top real-world similar projects",
   gradient: "from-violet-500 to-indigo-500",
 },
