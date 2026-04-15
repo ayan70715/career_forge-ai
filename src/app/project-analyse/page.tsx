@@ -3,7 +3,7 @@
 
 import { useRef, useState } from "react";
 import {
-  GitCompare,
+  FolderSearch,
   Loader2,
   Upload,
   X,
