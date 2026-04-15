@@ -538,7 +538,7 @@ Uniqueness score guide:
               <Card className="border-glass-border/80 bg-surface-1/95 shadow-[0_20px_45px_var(--shadow-heavy)]">
                 <CardContent className="p-5 space-y-3">
                   <div className="flex items-center gap-2">
-                    <FolderSeaech className="h-4 w-4 text-primary" />
+                    <FolderSearch className="h-4 w-4 text-primary" />
                     <h3 className="text-sm font-semibold">Overall Assessment</h3>
                   </div>
                   <p className="text-sm text-muted-foreground leading-relaxed">{result.overallSummary}</p>
