@@ -687,7 +687,7 @@ Uniqueness score guide:
             <Card className="border-glass-border/80 bg-surface-1/95 min-h-90 flex items-center justify-center">
               <CardContent className="p-6 text-center">
                 <div className="mx-auto h-14 w-14 rounded-2xl border border-glass-border bg-surface-2 flex items-center justify-center mb-4">
-                  <GitCompare className="h-7 w-7 opacity-30" />
+                  <FolderSearch className="h-7 w-7 opacity-30" />
                 </div>
                 <h3 className="text-lg font-semibold">Results will appear here</h3>
                 <p className="text-xs text-muted-foreground mt-2 max-w-60 mx-auto leading-relaxed">
