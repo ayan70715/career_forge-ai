@@ -513,7 +513,7 @@ Uniqueness score guide:
                     {loading ? (
                       <><Loader2 className="h-4 w-4 animate-spin" /> Analyzing...</>
                     ) : (
-                      <><GitCompare className="h-4 w-4" /> Run Analysis</>
+                      <><FolderSearch className="h-4 w-4" /> Run Analysis</>
                     )}
                   </Button>
                 </div>
