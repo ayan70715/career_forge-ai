@@ -11,7 +11,6 @@ export function useSpeechToText() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
