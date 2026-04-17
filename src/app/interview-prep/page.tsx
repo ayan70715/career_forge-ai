@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 export default function InterviewSetupPage() {
   const router = useRouter();
 
+  const [role, setRole] = useState("");
+  const [type, setType] = useState("technical");
   const [interviewerCount, setInterviewerCount] = useState(2);
   const [duration, setDuration] = useState(20);
 
@@ -14,6 +16,8 @@ export default function InterviewSetupPage() {
     localStorage.setItem(
       "interviewConfig",
       JSON.stringify({
+        role,
+        type,
         interviewerCount,
         duration,
       })
@@ -25,7 +29,7 @@ export default function InterviewSetupPage() {
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center px-6">
       <div className="w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-xl space-y-8">
-        
+
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-semibold">
@@ -36,7 +40,48 @@ export default function InterviewSetupPage() {
           </p>
         </div>
 
-        {/* Interviewer Count */}
+        {/* Role */}
+        <div className="space-y-2">
+          <label className="text-sm text-zinc-300">
+            Target Role
+          </label>
+          <input
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            placeholder="e.g. Software Engineer, Product Manager"
+            className="w-full px-4 py-3 rounded-lg bg-zinc-800 border border-zinc-700 focus:outline-none"
+          />
+        </div>
+
+        {/* Interview Type */}
+        <div className="space-y-3">
+          <label className="text-sm text-zinc-300">
+            Interview Type
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { key: "technical", label: "Technical" },
+              { key: "behavioral", label: "Behavioral" },
+              { key: "system", label: "System Design" },
+              { key: "hr", label: "HR Round" },
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setType(item.key)}
+                className={`py-3 rounded-lg border transition ${
+                  type === item.key
+                    ? "bg-purple-600 border-purple-500"
+                    : "bg-zinc-800 border-zinc-700 hover:bg-zinc-700"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Interviewers */}
         <div className="space-y-3">
           <label className="text-sm text-zinc-300">
             Number of Interviewers
@@ -62,7 +107,7 @@ export default function InterviewSetupPage() {
         {/* Duration */}
         <div className="space-y-3">
           <label className="text-sm text-zinc-300">
-            Interview Duration
+            Duration
           </label>
 
           <div className="grid grid-cols-3 gap-3">
@@ -82,16 +127,18 @@ export default function InterviewSetupPage() {
           </div>
         </div>
 
-        {/* Start Button */}
+        {/* Start */}
         <Button
           onClick={startInterview}
-          className="w-full py-3 text-lg bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-90 transition"
+          className="w-full py-3 text-lg bg-gradient-to-r from-purple-600 to-blue-600"
         >
           ▶ Start Interview
         </Button>
+
+        {/* Chat Mode */}
         <Button
           variant="outline"
-          className="w-full py-3"
+          className="w-full"
           onClick={() => router.push("/interview-prep/chat")}
         >
           💬 Use Classic Chat Mode
