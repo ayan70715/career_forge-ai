@@ -15,7 +15,7 @@ export function useTextToSpeech() {
     speechSynthesis.onvoiceschanged = loadVoices;
   }, []);
 
-  const speak = (text: string, voiceName?: string) => {
+  const speak = (text: string, voiceName?: string, onEnd?: () => void) => {
     if (!text) return;
 
     const utterance = new SpeechSynthesisUtterance(text);
@@ -37,5 +37,5 @@ export function useTextToSpeech() {
     speechSynthesis.cancel();
   };
 
-  return { speak, stop };
+  return { speak, stop, isSpeaking, voices };
 }
