@@ -257,9 +257,27 @@ Respond:
 
       {/* CONTROLS */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex gap-4">
-        <Button onClick={handleMic}>🎤</Button>
-        <Button onClick={toggleCamera}>📷</Button>
-        <Button onClick={() => router.push("/")}>❌</Button>
+        <Button 
+          className={`py-3 rounded-lg border transition-all duration-200 active:scale-90 ${
+            type === item.key
+            ? "bg-purple-600 border-purple-500 scale-95"
+            : "bg-zinc-800 border-zinc-700 hover:bg-zinc-700"
+          }`}
+          onClick={handleMic}>🎤</Button>
+        <Button
+          className={`py-3 rounded-lg border transition-all duration-200 active:scale-90 ${
+           type === item.key
+           ? "bg-purple-600 border-purple-500 scale-95"
+           : "bg-zinc-800 border-zinc-700 hover:bg-zinc-700"
+          }`}
+          onClick={toggleCamera}>📷</Button>
+        <Button 
+          className={`py-3 rounded-lg border transition-all duration-200 active:scale-90 ${
+          type === item.key
+          ? "bg-purple-600 border-purple-500 scale-95"
+          : "bg-zinc-800 border-zinc-700 hover:bg-zinc-700"
+          }`}
+          onClick={() => router.push("/")}>❌</Button>
       </div>
     </div>
   );
