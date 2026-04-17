@@ -11,9 +11,14 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({ text: response });
-  } catch {
+  } catch (err: any) {
+    console.error("API ERROR:", err);
+
     return NextResponse.json(
-      { error: "Failed" },
+      {
+        error:
+          err?.message || "Something went wrong with AI",
+      },
       { status: 500 }
     );
   }
