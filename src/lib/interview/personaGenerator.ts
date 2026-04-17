@@ -5,8 +5,8 @@ export interface InterviewerPersona {
   style: string;
 }
 
-export function getDefaultPersonas(): InterviewerPersona[] {
-  return [
+export function getDefaultPersonas(count: number = 2) {
+  const all = [
     {
       id: "1",
       name: "Amit",
@@ -19,5 +19,12 @@ export function getDefaultPersonas(): InterviewerPersona[] {
       role: "HR Manager",
       style: "friendly, behavioral, focuses on communication",
     },
-  ];
+    {
+       id: "3",
+       name: "John",
+      role: "Product Manager",
+      style: "excited, disciplined, focuses on solving problems",
+    },
+  ]
+  return all.slice(0, count);
 }
