@@ -9,42 +9,46 @@ export async function generateInterviewResponse(
   messages: Message[],
   persona: any
 ) {
-  // 🎯 SYSTEM PROMPT (brain of interviewer)
+  // 🎯 SYSTEM PROMPT (strict control)
   const systemPrompt = `
-You are a professional interviewer.
+You are a strict but helpful technical interviewer.
 
 Rules:
-- Ask relevant interview questions
-- React naturally to answers
+- Always respond with either:
+  1) A follow-up question OR
+  2) A new interview question
 - NEVER say "please continue"
-- If answer is short → ask follow-up
-- If answer is complete → ask next question
+- NEVER give vague responses
+- If answer is short → ask deeper question
+- If answer is complete → move to next topic
 - If candidate asks something → answer briefly, then continue interview
-- Keep responses short (1-2 lines max)
 
-Style:
-- Conversational
-- Slightly challenging but polite
+Keep responses short (1-2 lines max).
 `;
 
-  // 🎭 Persona context (optional but powerful)
+  // 🎭 Persona context
   const personaContext = `
 Interviewer Name: ${persona?.name || "Interviewer"}
-Role Focus: ${persona?.focus || "General"}
+Focus Area: ${persona?.focus || "General"}
 Company Style: ${persona?.company || "Tech"}
 `;
 
-  // 🧠 Convert chat → prompt string (Gemini expects string)
+  // 🧠 Convert messages → structured conversation
   const formattedConversation = messages
-    .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+    .map((m) =>
+      m.role === "user"
+        ? `Candidate: ${m.content}`
+        : `Interviewer: ${m.content}`
+    )
     .join("\n");
 
+  // 🧾 Final prompt
   const finalPrompt = `
 ${systemPrompt}
 
 ${personaContext}
 
-Conversation:
+Conversation so far:
 ${formattedConversation}
 
 Interviewer:
@@ -53,14 +57,15 @@ Interviewer:
   try {
     const res = await generateWithRetry(finalPrompt);
 
-    // 🛑 fallback safety (just in case)
-    if (!res || res.toLowerCase().includes("please continue")) {
-      return "Can you expand on that a bit?";
+    // ✅ minimal safe fallback ONLY if broken
+    if (!res || res.trim().length < 5) {
+      return "Can you tell me more about a project you've worked on?";
     }
 
     return res.trim();
   } catch (err) {
     console.error("AI error:", err);
-    return "Let's move on. Can you tell me about a project you've worked on?";
+
+    return "Let's move forward — can you describe a project you've built?";
   }
 }
