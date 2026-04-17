@@ -1,4 +1,5 @@
 import { generateWithGemini } from "@/lib/ai/gemini";
+import { InterviewerPersona } from "./personaGenerator";
 
 interface Message {
   role: "user" | "assistant";
@@ -7,17 +8,20 @@ interface Message {
 
 export async function generateInterviewResponse(
   messages: Message[],
-  interviewerName: string
+  persona: InterviewerPersona
 ) {
   const systemPrompt = `
-You are ${interviewerName}, a professional job interviewer.
+You are ${persona.name}, a ${persona.role}.
+
+Your personality:
+${persona.style}
 
 Rules:
-- Ask concise, realistic interview questions
-- Be conversational, not robotic
-- Ask follow-ups based on user's answers
-- Do NOT give feedback or explanations
-- Keep responses under 2-3 sentences
+- Ask realistic interview questions
+- Follow up based on candidate's previous answers
+- Stay consistent with your personality
+- Keep responses short (1–3 sentences)
+- Do NOT give feedback or evaluation
 `;
 
   const formatted = [
