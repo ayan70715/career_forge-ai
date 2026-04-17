@@ -29,7 +29,11 @@ Rules:
     ...messages,
   ];
 
-  const res = await generateWithRetry(formatted);
+  const prompt = formatted
+  .map((m) => `${m.role}: ${m.content}`)
+  .join("\n");
+
+const res = await generateWithRetry(prompt);
 
   return res;
 }
