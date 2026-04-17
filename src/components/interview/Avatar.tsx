@@ -1,23 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 type AvatarState = "idle" | "listening" | "thinking" | "speaking";
 
 interface AvatarProps {
   name?: string;
   state?: AvatarState;
-  intensity?: number; // 0–1 (for speaking animation)
+  intensity?: number; // 0–1 (driven from TTS)
 }
 
 export default function Avatar({
   name = "Interviewer",
   state = "idle",
-  intensity = 0.5,
+  intensity = 0,
 }: AvatarProps) {
-  const [mouthOpen, setMouthOpen] = useState(0.2);
   const [blink, setBlink] = useState(false);
-  const rafRef = useRef<number | null>(null);
 
   // 👁️ Blink animation
   useEffect(() => {
@@ -29,28 +27,7 @@ export default function Avatar({
     return () => clearInterval(interval);
   }, []);
 
-  // 👄 Mouth animation
-  useEffect(() => {
-    if (state !== "speaking") {
-      setMouthOpen(0.15);
-      return;
-    }
-
-    const animate = () => {
-      // simple fake lip sync
-      const random = Math.random() * 0.6;
-      setMouthOpen(Math.max(0.2, random * intensity));
-      rafRef.current = requestAnimationFrame(animate);
-    };
-
-    rafRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [state, intensity]);
-
-  // 🎯 State visuals
+  // 🎯 State visuals (ring color)
   const ringColor =
     state === "listening"
       ? "ring-blue-400"
@@ -75,6 +52,7 @@ export default function Avatar({
               } origin-center`}
             />
           </div>
+
           <div className="absolute top-3 right-2 w-2 h-2 bg-white rounded-full overflow-hidden">
             <div
               className={`w-full h-full bg-black transition-all ${
@@ -83,17 +61,17 @@ export default function Avatar({
             />
           </div>
 
-          {/* Mouth */}
+          {/* 👄 Mouth (audio-driven) */}
           <div
             className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-white rounded-full transition-all"
             style={{
               width: "12px",
-              height: `${8 + mouthOpen * 12}px`,
+              height: `${6 + Math.min(intensity, 0.8) * 18}px`,
             }}
           />
         </div>
 
-        {/* Thinking dots */}
+        {/* 🤔 Thinking dots */}
         {state === "thinking" && (
           <div className="absolute bottom-[-18px] flex gap-1">
             <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-bounce" />
