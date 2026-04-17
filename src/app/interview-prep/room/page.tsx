@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import { getDefaultPersonas } from "@/lib/interview/personaGenerator";
+import { useRouter } from "next/navigation";
 
 type Message = {
   role: "user" | "assistant";
@@ -16,6 +17,7 @@ type Message = {
 type AvatarState = "idle" | "listening" | "thinking" | "speaking";
 
 export default function InterviewRoomPage() {
+  const router = useRouter();
   const personas = getDefaultPersonas();
 
   const { state: sttState, transcript: liveText, start, stop } =
@@ -213,6 +215,12 @@ export default function InterviewRoomPage() {
 
         <Button variant="destructive">
           End Interview
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => router.push("/interview-prep/chat")}
+        >
+          Switch to Chat
         </Button>
       </div>
     </div>
