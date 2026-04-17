@@ -129,23 +129,18 @@ export default function InterviewRoomPage() {
       )
       .join("\n");
 
-    // 🎯 Inject role + type
     const prompt = `
 You are a professional interviewer.
-
 Role: ${config.role || "Software Engineer"}
 Interview Type: ${config.type}
-
 Conversation:
 ${history}
-
 Rules:
 - Do NOT repeat questions
 - Ask ONE question only
 - If candidate asks → answer first
 - Match difficulty based on type
 - Be realistic interviewer
-
 Respond:
 `;
 
@@ -168,7 +163,6 @@ Respond:
         aiText = data.text;
       } catch (err: any) {
         setGeminiFailed(true);
-
         try {
           aiText = await (window as any).puter.ai.chat(prompt);
           setError(`⚠️ Gemini failed: ${err.message}`);
@@ -206,8 +200,8 @@ Respond:
   };
 
   return (
-    <div className="h-screen flex bg-black text-white">
-      {/* LEFT */}
+    <div className="h-screen flex bg-black text-white relative">
+      {/* LEFT - Video/Personas */}
       <div className="flex-1 grid grid-cols-2 gap-4 p-4">
         {personas.map((p) => (
           <div key={p.id} className="bg-zinc-900 rounded-xl flex items-center justify-center">
@@ -215,18 +209,18 @@ Respond:
           </div>
         ))}
 
-        <div className="bg-zinc-900 rounded-xl">
+        <div className="bg-zinc-900 rounded-xl overflow-hidden">
           {isCameraOn ? (
-            <video ref={videoRef} autoPlay muted playsInline className="w-full h-full" />
+            <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
           ) : (
             <div className="flex items-center justify-center h-full">Camera Off</div>
           )}
         </div>
       </div>
 
-      {/* RIGHT */}
+      {/* RIGHT - Transcript/Chat */}
       <div className="w-80 border-l border-zinc-800 flex flex-col">
-        <div className="p-3 text-sm font-semibold">
+        <div className="p-3 text-sm font-semibold border-bottom border-zinc-800">
           {config.role} • {config.type} • {config.duration} min
         </div>
 
@@ -234,17 +228,20 @@ Respond:
 
         <div className="flex-1 overflow-y-auto p-3 text-xs space-y-2">
           {transcript.map((t, i) => (
-            <div key={i}>{t}</div>
+            <div key={i} className="p-1 rounded bg-zinc-900/50">{t}</div>
           ))}
         </div>
 
-        <div className="p-2 flex gap-2">
+        <div className="p-2 flex gap-2 border-t border-zinc-800">
           <input
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
-            className="flex-1 bg-zinc-800 px-2"
+            onKeyDown={(e) => e.key === "Enter" && (handleUserMessage(textInput), setTextInput(""))}
+            className="flex-1 bg-zinc-800 px-2 py-1 rounded text-sm outline-none"
+            placeholder="Type a message..."
           />
           <Button
+            size="sm"
             onClick={() => {
               handleUserMessage(textInput);
               setTextInput("");
@@ -255,55 +252,52 @@ Respond:
         </div>
       </div>
 
-  {/* Controls */}
-  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4 bg-zinc-900/80 px-4 py-2 rounded-xl border border-zinc-700 shadow-lg">
-   {/* 🎤 Mic */}
-  <Button
-    onClick={handleMic}
-    className={`w-14 h-14 rounded-full text-xl transition-all duration-200 active:scale-90 ${
-      isRecording
-        ? "bg-red-500 hover:bg-red-600"
-        : "bg-zinc-800 hover:bg-zinc-700"
-    }`}
-  >
-    🎤
-  </Button>
+      {/* FLOATING CONTROLS */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4 bg-zinc-900/90 px-4 py-2 rounded-xl border border-zinc-700 shadow-2xl z-50">
+        {/* 🎤 Mic */}
+        <Button
+          onClick={handleMic}
+          className={`w-14 h-14 rounded-full text-xl transition-all duration-200 active:scale-90 ${
+            isRecording ? "bg-red-500 hover:bg-red-600" : "bg-zinc-800 hover:bg-zinc-700"
+          }`}
+        >
+          🎤
+        </Button>
 
-  {/* 📷 Camera */}
-  <Button
-    onClick={toggleCamera}
-    className={`w-14 h-14 rounded-full text-xl transition-all duration-200 active:scale-90 ${
-      isCameraOn
-        ? "bg-green-500 hover:bg-green-600"
-        : "bg-zinc-800 hover:bg-zinc-700"
-    }`}
-  >
-    📷
-  </Button>
+        {/* 📷 Camera */}
+        <Button
+          onClick={toggleCamera}
+          className={`w-14 h-14 rounded-full text-xl transition-all duration-200 active:scale-90 ${
+            isCameraOn ? "bg-green-500 hover:bg-green-600" : "bg-zinc-800 hover:bg-zinc-700"
+          }`}
+        >
+          📷
+        </Button>
 
-  {/* ❌ End */}
-  <Button
-    onClick={() => {
-      stop();
-      speechSynthesis.cancel();
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      router.push("/");
-    }}
-    className="w-14 h-14 rounded-full text-xl bg-red-600 hover:bg-red-700 transition-all duration-200 active:scale-90"
-  >
-    ❌
-  </Button>
+        {/* ❌ End */}
+        <Button
+          onClick={() => {
+            stop();
+            speechSynthesis.cancel();
+            streamRef.current?.getTracks().forEach((t) => t.stop());
+            router.push("/");
+          }}
+          className="w-14 h-14 rounded-full text-xl bg-red-600 hover:bg-red-700 transition-all duration-200 active:scale-90"
+        >
+          ❌
+        </Button>
 
-  {/* 💬 Chat */}
-  <Button
-    onClick={() => {
-      stop();
-      router.push("/interview-prep/chat");
-    }}
-    className="w-14 h-14 rounded-full text-xl bg-zinc-800 hover:bg-zinc-700 transition-all duration-200 active:scale-90"
-  >
-    💬
-  </Button>
-</div>
+        {/* 💬 Chat */}
+        <Button
+          onClick={() => {
+            stop();
+            router.push("/interview-prep/chat");
+          }}
+          className="w-14 h-14 rounded-full text-xl bg-zinc-800 hover:bg-zinc-700 transition-all duration-200 active:scale-90"
+        >
+          💬
+        </Button>
+      </div>
+    </div>
   );
 }
