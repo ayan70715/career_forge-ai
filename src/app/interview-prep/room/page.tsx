@@ -3,7 +3,7 @@
 import AvatarGrid from "@/components/interview/AvatarGrid";
 import Avatar from "@/components/interview/Avatar";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import { getDefaultPersonas } from "@/lib/interview/personaGenerator";
@@ -16,15 +16,17 @@ type Message = {
 export default function InterviewRoomPage() {
   const personas = getDefaultPersonas();
 
-  const { state: sttState, transcript: liveText, start, stop } = useSpeechToText();
+  const { state: sttState, transcript: liveText, start, stop } =
+    useSpeechToText();
   const { speak } = useTextToSpeech();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [transcript, setTranscript] = useState<string[]>([]);
-  const [currentSpeakerId, setCurrentSpeakerId] = useState<string>("idle");
+  const [currentSpeakerId, setCurrentSpeakerId] =
+    useState<string>("idle");
   const [speakingIntensity, setSpeakingIntensity] = useState(0);
 
-  // 🎭 Map personas to avatars
+  // 🎭 Avatar mapping
   const mappedInterviewers = personas.map((p) => ({
     id: p.id,
     name: p.name,
@@ -43,9 +45,15 @@ export default function InterviewRoomPage() {
   };
 
   // 📡 API call
-  async function getAIResponse(updatedMessages: Message[], persona: any) {
+  async function getAIResponse(
+    updatedMessages: Message[],
+    persona: any
+  ) {
     const res = await fetch("/api/interview/respond", {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         messages: updatedMessages,
         persona,
@@ -81,20 +89,19 @@ export default function InterviewRoomPage() {
 
     setCurrentSpeakerId("thinking");
 
-    // 🎯 pick persona
     const persona =
       Math.random() > 0.5 ? personas[0] : personas[1];
 
     const aiText = await getAIResponse(updatedMessages, persona);
 
-    // 🔥 speaking animation loop
+    // 🔥 animation loop
     let running = true;
 
     const animate = () => {
       if (!running) return;
 
-      setSpeakingIntensity((prev) =>
-        prev * 0.6 + Math.random() * 0.4
+      setSpeakingIntensity(
+        (prev) => prev * 0.6 + Math.random() * 0.4
       );
 
       requestAnimationFrame(animate);
@@ -115,8 +122,8 @@ export default function InterviewRoomPage() {
       }
     );
 
-    // 🧠 save AI message
-    setMessages((m) => [
+    // 🧠 Save AI response
+    setMessages([
       ...updatedMessages,
       { role: "assistant", content: aiText },
     ]);
@@ -131,8 +138,12 @@ export default function InterviewRoomPage() {
     <div className="h-screen flex flex-col">
       {/* Top */}
       <div className="flex justify-between px-6 py-3 border-b border-glass-border">
-        <span className="text-sm font-medium">AI Interview Room</span>
-        <span className="text-xs text-muted-foreground">Live</span>
+        <span className="text-sm font-medium">
+          AI Interview Room
+        </span>
+        <span className="text-xs text-muted-foreground">
+          Live
+        </span>
       </div>
 
       {/* Main */}
@@ -165,9 +176,11 @@ export default function InterviewRoomPage() {
           </div>
         </div>
 
-        {/* Right: Transcript */}
+        {/* Right */}
         <div className="w-80 border-l border-glass-border p-4 flex flex-col">
-          <h2 className="text-sm font-medium mb-3">Transcript</h2>
+          <h2 className="text-sm font-medium mb-3">
+            Transcript
+          </h2>
 
           <div className="flex-1 overflow-y-auto text-xs space-y-2 pr-2">
             {transcript.map((line, i) => (
@@ -176,7 +189,6 @@ export default function InterviewRoomPage() {
               </div>
             ))}
 
-            {/* 🎤 Live STT */}
             {sttState === "listening" && (
               <div className="text-primary italic">
                 You (live): {liveText || "..."}
@@ -192,11 +204,17 @@ export default function InterviewRoomPage() {
           variant="outline"
           onMouseDown={handleStartSpeaking}
           onMouseUp={handleStopSpeaking}
+          disabled={
+            currentSpeakerId !== "idle" &&
+            currentSpeakerId !== "you"
+          }
         >
           🎤 Hold to Speak
         </Button>
 
-        <Button variant="destructive">End Interview</Button>
+        <Button variant="destructive">
+          End Interview
+        </Button>
       </div>
     </div>
   );
