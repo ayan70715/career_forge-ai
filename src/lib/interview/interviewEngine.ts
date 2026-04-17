@@ -63,9 +63,9 @@ Interviewer:
     }
 
     return res.trim();
-  } catch (err) {
-    console.error("AI error:", err);
+  } catch (err: any) {
+      console.error("AI error:", err);
 
-    return "Let's move forward — can you describe a project you've built?";
+      throw new Error(err?.message || "AI failed");
   }
 }
