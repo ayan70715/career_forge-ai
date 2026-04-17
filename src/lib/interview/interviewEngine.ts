@@ -1,4 +1,4 @@
-import { generateWithGemini } from "@/lib/ai/gemini";
+import { generateWithRetry} from "@/lib/ai/gemini";
 import { InterviewerPersona } from "./personaGenerator";
 
 interface Message {
@@ -29,7 +29,7 @@ Rules:
     ...messages,
   ];
 
-  const res = await generateWithGemini(formatted);
+  const res = await generateWithRetry(formatted);
 
   return res;
 }
