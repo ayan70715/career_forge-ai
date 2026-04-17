@@ -7,10 +7,10 @@ type STTState = "idle" | "listening" | "error";
 export function useSpeechToText() {
   const [state, setState] = useState<STTState>("idle");
 
-  // 🟡 Live (interim) text while speaking
+  //  Live (interim) text while speaking
   const [transcript, setTranscript] = useState("");
 
-  // 🟢 Final confirmed speech
+  //  Final confirmed speech
   const [finalTranscript, setFinalTranscript] = useState("");
 
   const recognitionRef = useRef<any>(null);
