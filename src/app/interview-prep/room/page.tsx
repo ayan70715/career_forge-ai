@@ -15,8 +15,9 @@ type Message = {
 export default function InterviewRoomPage() {
   const router = useRouter();
   const personas = getDefaultPersonas();
-  const { speak } = useTextToSpeech();
-  const { start, stop, transcript: liveText, finalTranscript } =
+
+  const { speak, stop } = useTextToSpeech();
+  const { start, stop: stopSTT, transcript: liveText, finalTranscript } =
     useSpeechToText();
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -43,6 +44,13 @@ export default function InterviewRoomPage() {
       }
     }
     initCamera();
+  }, []);
+
+  // 🧠 Stop voice on exit
+  useEffect(() => {
+    return () => {
+      speechSynthesis.cancel();
+    };
   }, []);
 
   // 🤖 Load Puter fallback
@@ -80,6 +88,31 @@ export default function InterviewRoomPage() {
     let aiText = "";
     const persona = personas[0];
 
+    const history = updated
+      .slice(-6)
+      .map((m) =>
+        `${m.role === "user" ? "Candidate" : "Interviewer"}: ${m.content}`
+      )
+      .join("\n");
+
+    const prompt = `
+You are a professional technical interviewer.
+
+Conversation so far:
+${history}
+
+Rules:
+- Do NOT repeat questions
+- Ask only ONE question at a time
+- If candidate asks something → answer it first
+- If candidate gives short answer → ask follow-up
+- If answer is complete → move to next topic
+- Keep interview structured (Intro → Projects → DSA → Behavioral)
+- Be natural and conversational
+
+Respond as the interviewer:
+`;
+
     if (!geminiFailed) {
       try {
         const res = await fetch("/api/interview/respond", {
@@ -106,9 +139,7 @@ export default function InterviewRoomPage() {
         setGeminiFailed(true);
 
         try {
-          aiText = await (window as any).puter.ai.chat(
-            `You are a technical interviewer.\nCandidate said: ${userText}\nAsk the next relevant interview question.`
-          );
+          aiText = await (window as any).puter.ai.chat(prompt);
 
           setError(`⚠️ Gemini disabled: ${err.message}`);
         } catch {
@@ -117,16 +148,17 @@ export default function InterviewRoomPage() {
         }
       }
     } else {
-      // 🚀 direct fallback (no delay)
       try {
-        aiText = await (window as any).puter.ai.chat(
-          `You are a technical interviewer.\nCandidate said: ${userText}\nAsk the next relevant interview question.`
-        );
+        aiText = await (window as any).puter.ai.chat(prompt);
       } catch {
         setError("Fallback AI failed");
         return;
       }
     }
+
+    // 🔥 stop previous voice before speaking new
+    speechSynthesis.cancel();
+    speak(aiText);
 
     setMessages([
       ...updated,
@@ -134,8 +166,6 @@ export default function InterviewRoomPage() {
     ]);
 
     setTranscript((t) => [...t, `Interviewer: ${aiText}`]);
-
-    speak(aiText);
   };
 
   // 🎤 Mic toggle
@@ -144,7 +174,7 @@ export default function InterviewRoomPage() {
       start();
       setIsRecording(true);
     } else {
-      stop();
+      stopSTT();
       setIsRecording(false);
 
       const text = finalTranscript || liveText;
@@ -154,7 +184,7 @@ export default function InterviewRoomPage() {
 
   return (
     <div className="h-screen flex bg-black text-white relative">
-      {/* LEFT - Video grid */}
+      {/* LEFT - Video */}
       <div className="flex-1 grid grid-cols-2 gap-4 p-4">
         {personas.map((p) => (
           <div
@@ -166,7 +196,6 @@ export default function InterviewRoomPage() {
           </div>
         ))}
 
-        {/* User camera */}
         <div className="bg-zinc-900 rounded-xl overflow-hidden relative">
           <video
             ref={videoRef}
@@ -234,7 +263,11 @@ export default function InterviewRoomPage() {
         <Button
           variant="destructive"
           className="rounded-full w-12 h-12 active:scale-90 transition"
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            stop();
+            speechSynthesis.cancel();
+            router.push("/");
+          }}
         >
           End
         </Button>
@@ -243,9 +276,12 @@ export default function InterviewRoomPage() {
         <Button
           variant="outline"
           className="rounded-full w-12 h-12 active:scale-90 transition"
-          onClick={() => router.push("/interview-prep/chat")}
+          onClick={() => {
+            stop();
+            router.push("/interview-prep/chat");
+          }}
         >
-          Chat Mode
+          Chat
         </Button>
       </div>
     </div>
