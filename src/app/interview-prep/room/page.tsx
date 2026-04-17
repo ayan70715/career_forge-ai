@@ -60,7 +60,9 @@ Ask the first question only.`;
 
       const res = await fetch("/api/interview/respond", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           messages: [{ role: "user", content: prompt }],
           persona,
@@ -69,7 +71,8 @@ Ask the first question only.`;
       });
 
       const data = await res.json();
-      const aiText = data.text;
+      const aiText =
+        data.text || "Let's begin. Tell me about yourself.";
 
       let running = true;
       const animate = () => {
@@ -105,65 +108,75 @@ Ask the first question only.`;
       stop();
       setIsRecording(false);
 
-      if (!liveText.trim()) return;
+      // ⏳ wait for STT finalize
+      setTimeout(async () => {
+        if (!liveText.trim()) {
+          console.warn("No speech detected");
+          return;
+        }
 
-      const userText = liveText;
+        console.log("Captured speech:", liveText);
 
-      const updatedMessages: Message[] = [
-        ...messages,
-        { role: "user", content: userText },
-      ];
+        const userText = liveText;
 
-      setMessages(updatedMessages);
-      setTranscript((t) => [...t, `You: ${userText}`]);
+        const updatedMessages: Message[] = [
+          ...messages,
+          { role: "user", content: userText },
+        ];
 
-      setCurrentSpeakerId("thinking");
+        setMessages(updatedMessages);
+        setTranscript((t) => [...t, `You: ${userText}`]);
 
-      const persona =
-        Math.random() > 0.5 ? personas[0] : personas[1];
+        setCurrentSpeakerId("thinking");
 
-      const res = await fetch("/api/interview/respond", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: updatedMessages,
-          persona,
-          config,
-        }),
-      });
+        const persona =
+          Math.random() > 0.5 ? personas[0] : personas[1];
 
-      const data = await res.json();
-      const aiText = data.text;
+        const res = await fetch("/api/interview/respond", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: updatedMessages,
+            persona,
+            config,
+          }),
+        });
 
-      let running = true;
-      const animate = () => {
-        if (!running) return;
-        setSpeakingIntensity(
-          (prev) => prev * 0.6 + Math.random() * 0.4
-        );
-        requestAnimationFrame(animate);
-      };
-      animate();
+        const data = await res.json();
 
-      setCurrentSpeakerId(persona.id);
+        const aiText =
+          data.text || "Could you please repeat that?";
 
-      speak(aiText, undefined, () => {
-        running = false;
-        setSpeakingIntensity(0);
-        setCurrentSpeakerId("idle");
-      });
+        let running = true;
+        const animate = () => {
+          if (!running) return;
+          setSpeakingIntensity(
+            (prev) => prev * 0.6 + Math.random() * 0.4
+          );
+          requestAnimationFrame(animate);
+        };
+        animate();
 
-      setMessages([
-        ...updatedMessages,
-        { role: "assistant", content: aiText },
-      ]);
+        setCurrentSpeakerId(persona.id);
 
-      setTranscript((t) => [
-        ...t,
-        `${persona.name}: ${aiText}`,
-      ]);
+        speak(aiText, undefined, () => {
+          running = false;
+          setSpeakingIntensity(0);
+          setCurrentSpeakerId("idle");
+        });
+
+        setMessages([
+          ...updatedMessages,
+          { role: "assistant", content: aiText },
+        ]);
+
+        setTranscript((t) => [
+          ...t,
+          `${persona.name}: ${aiText}`,
+        ]);
+      }, 300);
     }
   };
 
@@ -268,7 +281,9 @@ Ask the first question only.`;
 
         <Button
           variant="outline"
-          onClick={() => router.push("/interview-prep/chat")}
+          onClick={() =>
+            router.push("/interview-prep/chat")
+          }
           className="active:scale-95"
         >
           💬 Chat
