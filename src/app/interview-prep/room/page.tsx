@@ -24,29 +24,14 @@ export default function InterviewRoomPage() {
   const [transcript, setTranscript] = useState<string[]>([]);
   const [textInput, setTextInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [isCameraOn, setIsCameraOn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [geminiFailed, setGeminiFailed] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
-  // 🎥 Camera
-  useEffect(() => {
-    async function initCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch {
-        console.log("Camera not available");
-      }
-    }
-    initCamera();
-  }, []);
-
-  // 🧠 Stop voice on exit
+  // 🔇 Stop voice on exit
   useEffect(() => {
     return () => {
       speechSynthesis.cancel();
@@ -64,12 +49,43 @@ export default function InterviewRoomPage() {
   // 🤖 First question
   useEffect(() => {
     const first = "Tell me about yourself.";
-
     speak(first);
-
     setMessages([{ role: "assistant", content: first }]);
     setTranscript([`Interviewer: ${first}`]);
   }, []);
+
+  // 🎥 Toggle Camera
+  const toggleCamera = async () => {
+    if (!isCameraOn) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user" },
+        });
+
+        streamRef.current = stream;
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+
+        setIsCameraOn(true);
+      } catch (err) {
+        console.error("Camera error:", err);
+        setError("Camera access denied or unavailable");
+      }
+    } else {
+      // turn off
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+
+      setIsCameraOn(false);
+    }
+  };
 
   // 🧠 Handle message
   const handleUserMessage = async (userText: string) => {
@@ -107,40 +123,29 @@ Rules:
 - If candidate asks something → answer it first
 - If candidate gives short answer → ask follow-up
 - If answer is complete → move to next topic
-- Keep interview structured (Intro → Projects → DSA → Behavioral)
 - Be natural and conversational
 
-Respond as the interviewer:
+Respond as interviewer:
 `;
 
     if (!geminiFailed) {
       try {
         const res = await fetch("/api/interview/respond", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: updated,
-            persona,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: updated, persona }),
         });
 
         const data = await res.json();
 
-        if (!res.ok) {
-          throw new Error(data.error);
-        }
+        if (!res.ok) throw new Error(data.error);
 
         aiText = data.text;
       } catch (err: any) {
-        console.error("Gemini failed:", err);
-
         setGeminiFailed(true);
 
         try {
           aiText = await (window as any).puter.ai.chat(prompt);
-
           setError(`⚠️ Gemini disabled: ${err.message}`);
         } catch {
           setError("Both AI systems failed");
@@ -156,15 +161,10 @@ Respond as the interviewer:
       }
     }
 
-    // 🔥 stop previous voice before speaking new
     speechSynthesis.cancel();
     speak(aiText);
 
-    setMessages([
-      ...updated,
-      { role: "assistant", content: aiText },
-    ]);
-
+    setMessages([...updated, { role: "assistant", content: aiText }]);
     setTranscript((t) => [...t, `Interviewer: ${aiText}`]);
   };
 
@@ -176,7 +176,6 @@ Respond as the interviewer:
     } else {
       stopSTT();
       setIsRecording(false);
-
       const text = finalTranscript || liveText;
       handleUserMessage(text);
     }
@@ -184,7 +183,7 @@ Respond as the interviewer:
 
   return (
     <div className="h-screen flex bg-black text-white relative">
-      {/* LEFT - Video */}
+      {/* LEFT */}
       <div className="flex-1 grid grid-cols-2 gap-4 p-4">
         {personas.map((p) => (
           <div
@@ -196,29 +195,30 @@ Respond as the interviewer:
           </div>
         ))}
 
+        {/* Camera */}
         <div className="bg-zinc-900 rounded-xl overflow-hidden relative">
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            className="w-full h-full object-cover"
-          />
-          <span className="absolute bottom-2 left-2 text-xs">
-            You
-          </span>
+          {isCameraOn ? (
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-zinc-500">
+              Camera Off
+            </div>
+          )}
         </div>
       </div>
 
-      {/* RIGHT - Transcript */}
+      {/* RIGHT */}
       <div className="w-80 border-l border-zinc-800 flex flex-col">
-        <div className="p-3 text-sm font-semibold">
-          Transcript
-        </div>
+        <div className="p-3 text-sm font-semibold">Transcript</div>
 
         {error && (
-          <div className="bg-red-500 text-white text-xs p-2 m-2 rounded">
-            {error}
-          </div>
+          <div className="bg-red-500 text-xs p-2 m-2 rounded">{error}</div>
         )}
 
         <div className="flex-1 overflow-y-auto p-3 text-xs space-y-2">
@@ -227,15 +227,13 @@ Respond as the interviewer:
           ))}
         </div>
 
-        {/* Text input */}
         <div className="border-t border-zinc-800 p-2 flex gap-2">
           <input
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
-            placeholder="Type your answer..."
             className="flex-1 px-3 py-2 bg-transparent border border-zinc-700 rounded-md text-sm"
+            placeholder="Type your answer..."
           />
-
           <Button
             onClick={() => {
               handleUserMessage(textInput);
@@ -248,40 +246,52 @@ Respond as the interviewer:
       </div>
 
       {/* Controls */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4 bg-zinc-900/80 backdrop-blur px-4 py-2 rounded-xl border border-zinc-700">
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4 bg-zinc-900/80 px-4 py-2 rounded-xl border border-zinc-700">
+        
         {/* Mic */}
         <Button
           onClick={handleMic}
-          className={`rounded-full w-12 h-12 ${
+          className={`w-12 h-12 rounded-full ${
             isRecording ? "bg-red-500" : "bg-zinc-800"
-          } active:scale-90 transition`}
+          }`}
         >
-          Mic
+          🎤
+        </Button>
+
+        {/* Camera */}
+        <Button
+          onClick={toggleCamera}
+          className={`w-12 h-12 rounded-full ${
+            isCameraOn ? "bg-green-500" : "bg-zinc-800"
+          }`}
+        >
+          📷
         </Button>
 
         {/* End */}
         <Button
           variant="destructive"
-          className="rounded-full w-12 h-12 active:scale-90 transition"
+          className="w-12 h-12 rounded-full"
           onClick={() => {
             stop();
             speechSynthesis.cancel();
+            streamRef.current?.getTracks().forEach((t) => t.stop());
             router.push("/");
           }}
         >
-          End
+          ❌
         </Button>
 
         {/* Chat */}
         <Button
           variant="outline"
-          className="rounded-full w-12 h-12 active:scale-90 transition"
+          className="w-12 h-12 rounded-full"
           onClick={() => {
             stop();
             router.push("/interview-prep/chat");
           }}
         >
-          Chat
+          💬
         </Button>
       </div>
     </div>
