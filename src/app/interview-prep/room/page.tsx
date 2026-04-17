@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import { getDefaultPersonas } from "@/lib/interview/personaGenerator";
@@ -13,7 +12,6 @@ type Message = {
 };
 
 export default function InterviewRoomPage() {
-  const router = useRouter();
   const personas = getDefaultPersonas();
 
   const { speak } = useTextToSpeech();
@@ -28,7 +26,7 @@ export default function InterviewRoomPage() {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // 🎥 CAMERA
+  // 🎥 Camera
   useEffect(() => {
     async function initCamera() {
       try {
@@ -38,15 +36,23 @@ export default function InterviewRoomPage() {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
-      } catch (err) {
-        console.log("Camera error", err);
+      } catch {
+        console.log("Camera not available");
       }
     }
 
     initCamera();
   }, []);
 
-  // 🤖 FIRST QUESTION
+  // 🤖 Load Puter (fallback)
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://js.puter.com/v2/";
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
+
+  // 🤖 First question
   useEffect(() => {
     const first = "Tell me about yourself.";
 
@@ -56,7 +62,7 @@ export default function InterviewRoomPage() {
     setTranscript([`Interviewer: ${first}`]);
   }, []);
 
-  // 🧠 HANDLE MESSAGE
+  // 🧠 Handle message
   const handleUserMessage = async (userText: string) => {
     if (!userText.trim()) return;
 
@@ -70,7 +76,11 @@ export default function InterviewRoomPage() {
     setMessages(updated);
     setTranscript((t) => [...t, `You: ${userText}`]);
 
+    let aiText = "";
+    const persona = personas[0];
+
     try {
+      // 🔥 Primary: Gemini (API)
       const res = await fetch("/api/interview/respond", {
         method: "POST",
         headers: {
@@ -78,37 +88,49 @@ export default function InterviewRoomPage() {
         },
         body: JSON.stringify({
           messages: updated,
-          persona: personas[0],
+          persona,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "AI failed");
-        return;
+        throw new Error(data.error);
       }
 
-      const aiText = data.text;
-
-      setMessages([
-        ...updated,
-        { role: "assistant", content: aiText },
-      ]);
-
-      setTranscript((t) => [
-        ...t,
-        `Interviewer: ${aiText}`,
-      ]);
-
-      speak(aiText);
+      aiText = data.text;
     } catch (err: any) {
-      console.error(err);
-      setError("Network or AI failure");
+      console.error("Gemini failed:", err);
+
+      // ⚡ Fallback: Puter
+      try {
+        aiText = await (window as any).puter.ai.chat(
+          `You are a technical interviewer.\nCandidate said: ${userText}\nRespond with next question.`
+        );
+
+        setError(
+          `⚠️ Gemini failed: ${err.message} (fallback used)`
+        );
+      } catch {
+        setError("Both AI systems failed");
+        return;
+      }
     }
+
+    setMessages([
+      ...updated,
+      { role: "assistant", content: aiText },
+    ]);
+
+    setTranscript((t) => [
+      ...t,
+      `Interviewer: ${aiText}`,
+    ]);
+
+    speak(aiText);
   };
 
-  // 🎤 MIC
+  // 🎤 Mic toggle
   const handleMic = () => {
     if (!isRecording) {
       start();
@@ -124,7 +146,7 @@ export default function InterviewRoomPage() {
 
   return (
     <div className="h-screen flex bg-black text-white relative">
-      {/* LEFT */}
+      {/* LEFT - Video grid */}
       <div className="flex-1 grid grid-cols-2 gap-4 p-4">
         {personas.map((p) => (
           <div
@@ -149,16 +171,15 @@ export default function InterviewRoomPage() {
         </div>
       </div>
 
-      {/* RIGHT */}
+      {/* RIGHT - Transcript */}
       <div className="w-80 border-l border-zinc-800 flex flex-col">
         <div className="p-3 text-sm font-semibold">
           Transcript
         </div>
 
-        {/* 🚨 ERROR */}
         {error && (
           <div className="bg-red-500 text-white text-xs p-2 m-2 rounded">
-            ⚠️ {error}
+            {error}
           </div>
         )}
 
@@ -168,7 +189,7 @@ export default function InterviewRoomPage() {
           ))}
         </div>
 
-        {/* INPUT */}
+        {/* Text input */}
         <div className="border-t border-zinc-800 p-2 flex gap-2">
           <input
             value={textInput}
@@ -188,7 +209,7 @@ export default function InterviewRoomPage() {
         </div>
       </div>
 
-      {/* CONTROLS */}
+      {/* Controls */}
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4">
         <Button
           onClick={handleMic}
