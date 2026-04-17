@@ -349,11 +349,6 @@ Interviewer:`;
 
           {/* Start Button */}
           <Button
-            onClick={() => router.push("/interview-prep/room")}
-          >
-          ▶ Start Live Interview
-          </Button>
-          <Button
             onClick={startInterview}
             variant="glow"
             className="w-full gap-3 py-7 text-lg bg-linear-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700"
