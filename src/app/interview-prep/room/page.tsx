@@ -42,10 +42,15 @@ export default function InterviewRoomPage() {
 
   const [textInput, setTextInput] = useState("");
 
+  const isMobile =
+  typeof navigator !== "undefined" &&
+  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
   const isSTTSupported =
-    typeof window !== "undefined" &&
-    ("webkitSpeechRecognition" in window ||
-      "SpeechRecognition" in window);
+  !isMobile &&
+  typeof window !== "undefined" &&
+  ("webkitSpeechRecognition" in window ||
+    "SpeechRecognition" in window);
 
   // ✅ Load config
   useEffect(() => {
