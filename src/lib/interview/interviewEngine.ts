@@ -1,39 +1,66 @@
-import { generateWithRetry} from "@/lib/ai/gemini";
-import { InterviewerPersona } from "./personaGenerator";
+import { generateWithRetry } from "@/lib/ai/gemini";
 
-interface Message {
+type Message = {
   role: "user" | "assistant";
   content: string;
-}
+};
 
 export async function generateInterviewResponse(
   messages: Message[],
-  persona: InterviewerPersona
+  persona: any
 ) {
+  // 🎯 SYSTEM PROMPT (brain of interviewer)
   const systemPrompt = `
-You are ${persona.name}, a ${persona.role}.
-
-Your personality:
-${persona.style}
+You are a professional interviewer.
 
 Rules:
-- Ask realistic interview questions
-- Follow up based on candidate's previous answers
-- Stay consistent with your personality
-- Keep responses short (1–3 sentences)
-- Do NOT give feedback or evaluation
+- Ask relevant interview questions
+- React naturally to answers
+- NEVER say "please continue"
+- If answer is short → ask follow-up
+- If answer is complete → ask next question
+- If candidate asks something → answer briefly, then continue interview
+- Keep responses short (1-2 lines max)
+
+Style:
+- Conversational
+- Slightly challenging but polite
 `;
 
-  const formatted = [
-    { role: "system", content: systemPrompt },
-    ...messages,
-  ];
+  // 🎭 Persona context (optional but powerful)
+  const personaContext = `
+Interviewer Name: ${persona?.name || "Interviewer"}
+Role Focus: ${persona?.focus || "General"}
+Company Style: ${persona?.company || "Tech"}
+`;
 
-  const prompt = formatted
-  .map((m) => `${m.role}: ${m.content}`)
-  .join("\n");
+  // 🧠 Convert chat → prompt string (Gemini expects string)
+  const formattedConversation = messages
+    .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+    .join("\n");
 
-const res = await generateWithRetry(prompt);
+  const finalPrompt = `
+${systemPrompt}
 
-  return res;
+${personaContext}
+
+Conversation:
+${formattedConversation}
+
+Interviewer:
+`;
+
+  try {
+    const res = await generateWithRetry(finalPrompt);
+
+    // 🛑 fallback safety (just in case)
+    if (!res || res.toLowerCase().includes("please continue")) {
+      return "Can you expand on that a bit?";
+    }
+
+    return res.trim();
+  } catch (err) {
+    console.error("AI error:", err);
+    return "Let's move on. Can you tell me about a project you've worked on?";
+  }
 }
