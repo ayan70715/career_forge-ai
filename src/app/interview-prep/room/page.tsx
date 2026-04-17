@@ -71,7 +71,7 @@ export default function InterviewRoomPage() {
 
     const userText = liveText;
 
-    const updatedMessages = [
+    const updatedMessages: Message[] = [
       ...messages,
       { role: "user", content: userText },
     ];
