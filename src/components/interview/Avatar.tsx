@@ -66,7 +66,7 @@ export default function Avatar({
             className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-white rounded-full transition-all"
             style={{
               width: "12px",
-              height: `${6 + Math.min(intensity, 0.8) * 18}px`,
+              height: `${6 + Math.min(intensity, 0.8) * 17}px`,
             }}
           />
         </div>
