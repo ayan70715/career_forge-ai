@@ -22,29 +22,46 @@ export function useSpeechToText() {
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
+
+    // ✅ FIXED CONFIG
+    recognition.continuous = true;        // keeps listening
+    recognition.interimResults = true;    // live updates
     recognition.lang = "en-US";
 
-    recognition.onstart = () => setState("listening");
+    recognition.onstart = () => {
+      setState("listening");
+      setTranscript(""); // reset each time mic starts
+    };
 
     recognition.onresult = (event: any) => {
       let text = "";
-      for (let i = 0; i < event.results.length; i++) {
+
+      // ✅ FIXED LOOP (important)
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         text += event.results[i][0].transcript;
       }
+
       setTranscript(text);
     };
 
-    recognition.onerror = () => setState("error");
+    recognition.onerror = (err: any) => {
+      console.error("STT Error:", err);
+      setState("error");
+    };
 
-    recognition.onend = () => setState("idle");
+    recognition.onend = () => {
+      setState("idle");
+    };
 
     recognitionRef.current = recognition;
   }, []);
 
   const start = () => {
-    recognitionRef.current?.start();
+    try {
+      recognitionRef.current?.start();
+    } catch (e) {
+      console.warn("Mic already started");
+    }
   };
 
   const stop = () => {
