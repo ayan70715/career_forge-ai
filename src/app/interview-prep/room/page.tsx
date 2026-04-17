@@ -14,11 +14,15 @@ type Message = {
 
 export default function InterviewRoomPage() {
   const router = useRouter();
-  const personas = getDefaultPersonas();
 
   const { speak, stop } = useTextToSpeech();
   const { start, stop: stopSTT, transcript: liveText, finalTranscript } =
     useSpeechToText();
+
+  const [config, setConfig] = useState({
+    interviewerCount: 2,
+    duration: 20,
+  });
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [transcript, setTranscript] = useState<string[]>([]);
@@ -31,6 +35,16 @@ export default function InterviewRoomPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // 🔥 Load config from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem("interviewConfig");
+    if (stored) {
+      setConfig(JSON.parse(stored));
+    }
+  }, []);
+
+  const personas = getDefaultPersonas(config.interviewerCount);
+
   // 🔇 Stop voice on exit
   useEffect(() => {
     return () => {
@@ -38,7 +52,7 @@ export default function InterviewRoomPage() {
     };
   }, []);
 
-  // 🤖 Load Puter fallback
+  // 🤖 Load Puter
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://js.puter.com/v2/";
@@ -50,11 +64,12 @@ export default function InterviewRoomPage() {
   useEffect(() => {
     const first = "Tell me about yourself.";
     speak(first);
+
     setMessages([{ role: "assistant", content: first }]);
     setTranscript([`Interviewer: ${first}`]);
   }, []);
 
-  // 🎥 Toggle Camera
+  // 🎥 Camera toggle
   const toggleCamera = async () => {
     if (!isCameraOn) {
       try {
@@ -71,11 +86,9 @@ export default function InterviewRoomPage() {
 
         setIsCameraOn(true);
       } catch (err) {
-        console.error("Camera error:", err);
-        setError("Camera access denied or unavailable");
+        setError("Camera access denied");
       }
     } else {
-      // turn off
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
 
@@ -101,9 +114,6 @@ export default function InterviewRoomPage() {
     setMessages(updated);
     setTranscript((t) => [...t, `You: ${userText}`]);
 
-    let aiText = "";
-    const persona = personas[0];
-
     const history = updated
       .slice(-6)
       .map((m) =>
@@ -122,22 +132,26 @@ Rules:
 - Ask only ONE question at a time
 - If candidate asks something → answer it first
 - If candidate gives short answer → ask follow-up
-- If answer is complete → move to next topic
-- Be natural and conversational
+- If answer is complete → move forward naturally
+- Be conversational
 
 Respond as interviewer:
 `;
+
+    let aiText = "";
 
     if (!geminiFailed) {
       try {
         const res = await fetch("/api/interview/respond", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: updated, persona }),
+          body: JSON.stringify({
+            messages: updated,
+            persona: personas[0],
+          }),
         });
 
         const data = await res.json();
-
         if (!res.ok) throw new Error(data.error);
 
         aiText = data.text;
@@ -148,7 +162,7 @@ Respond as interviewer:
           aiText = await (window as any).puter.ai.chat(prompt);
           setError(`⚠️ Gemini disabled: ${err.message}`);
         } catch {
-          setError("Both AI systems failed");
+          setError("AI failed");
           return;
         }
       }
@@ -156,7 +170,7 @@ Respond as interviewer:
       try {
         aiText = await (window as any).puter.ai.chat(prompt);
       } catch {
-        setError("Fallback AI failed");
+        setError("Fallback failed");
         return;
       }
     }
@@ -195,7 +209,6 @@ Respond as interviewer:
           </div>
         ))}
 
-        {/* Camera */}
         <div className="bg-zinc-900 rounded-xl overflow-hidden relative">
           {isCameraOn ? (
             <video
@@ -206,7 +219,7 @@ Respond as interviewer:
               className="w-full h-full object-cover"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-zinc-500">
+            <div className="flex items-center justify-center h-full text-zinc-500">
               Camera Off
             </div>
           )}
@@ -215,10 +228,14 @@ Respond as interviewer:
 
       {/* RIGHT */}
       <div className="w-80 border-l border-zinc-800 flex flex-col">
-        <div className="p-3 text-sm font-semibold">Transcript</div>
+        <div className="p-3 text-sm font-semibold">
+          Transcript ({config.duration} min)
+        </div>
 
         {error && (
-          <div className="bg-red-500 text-xs p-2 m-2 rounded">{error}</div>
+          <div className="bg-red-500 text-xs p-2 m-2 rounded">
+            {error}
+          </div>
         )}
 
         <div className="flex-1 overflow-y-auto p-3 text-xs space-y-2">
@@ -248,27 +265,24 @@ Respond as interviewer:
       {/* Controls */}
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4 bg-zinc-900/80 px-4 py-2 rounded-xl border border-zinc-700">
         
-        {/* Mic */}
         <Button
           onClick={handleMic}
           className={`w-12 h-12 rounded-full ${
             isRecording ? "bg-red-500" : "bg-zinc-800"
           }`}
         >
-          🎤
+          Mic
         </Button>
 
-        {/* Camera */}
         <Button
           onClick={toggleCamera}
           className={`w-12 h-12 rounded-full ${
             isCameraOn ? "bg-green-500" : "bg-zinc-800"
           }`}
         >
-          📷
+          Camera
         </Button>
 
-        {/* End */}
         <Button
           variant="destructive"
           className="w-12 h-12 rounded-full"
@@ -279,10 +293,9 @@ Respond as interviewer:
             router.push("/");
           }}
         >
-          ❌
+          End
         </Button>
 
-        {/* Chat */}
         <Button
           variant="outline"
           className="w-12 h-12 rounded-full"
@@ -291,7 +304,7 @@ Respond as interviewer:
             router.push("/interview-prep/chat");
           }}
         >
-          💬
+          Chat
         </Button>
       </div>
     </div>
