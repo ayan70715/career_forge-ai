@@ -20,6 +20,8 @@ export default function InterviewRoomPage() {
     useSpeechToText();
 
   const [config, setConfig] = useState({
+    role: "",
+    type: "technical",
     interviewerCount: 2,
     duration: 20,
   });
@@ -35,7 +37,7 @@ export default function InterviewRoomPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // 🔥 Load config from localStorage
+  // ✅ Load config
   useEffect(() => {
     const stored = localStorage.getItem("interviewConfig");
     if (stored) {
@@ -45,14 +47,14 @@ export default function InterviewRoomPage() {
 
   const personas = getDefaultPersonas(config.interviewerCount);
 
-  // 🔇 Stop voice on exit
+  // 🔇 Cleanup
   useEffect(() => {
     return () => {
       speechSynthesis.cancel();
     };
   }, []);
 
-  // 🤖 Load Puter
+  // 🤖 Load Puter fallback
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://js.puter.com/v2/";
@@ -60,21 +62,31 @@ export default function InterviewRoomPage() {
     document.body.appendChild(script);
   }, []);
 
-  // 🤖 First question
+  // 🎤 First question (dynamic now)
   useEffect(() => {
-    const first = "Tell me about yourself.";
-    speak(first);
+    let first = "Tell me about yourself.";
 
+    if (config.type === "technical") {
+      first = `Hi, let's begin your ${config.role || "technical"} interview. Can you briefly introduce yourself and your technical background?`;
+    } else if (config.type === "hr") {
+      first = `Hi, let's begin your HR round for ${config.role}. Tell me about yourself and your motivations.`;
+    } else if (config.type === "system") {
+      first = `Let's start your system design interview for ${config.role}. Can you walk me through a system you've built?`;
+    } else if (config.type === "behavioral") {
+      first = `Let's start your behavioral interview. Tell me about a challenging situation you handled.`;
+    }
+
+    speak(first);
     setMessages([{ role: "assistant", content: first }]);
     setTranscript([`Interviewer: ${first}`]);
-  }, []);
+  }, [config]);
 
-  // 🎥 Camera toggle
+  // 🎥 Camera
   const toggleCamera = async () => {
     if (!isCameraOn) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" },
+          video: true,
         });
 
         streamRef.current = stream;
@@ -85,22 +97,18 @@ export default function InterviewRoomPage() {
         }
 
         setIsCameraOn(true);
-      } catch (err) {
-        setError("Camera access denied");
+      } catch {
+        setError("Camera denied");
       }
     } else {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-
+      if (videoRef.current) videoRef.current.srcObject = null;
       setIsCameraOn(false);
     }
   };
 
-  // 🧠 Handle message
+  // 🧠 MAIN AI LOGIC
   const handleUserMessage = async (userText: string) => {
     if (!userText.trim()) return;
 
@@ -121,21 +129,24 @@ export default function InterviewRoomPage() {
       )
       .join("\n");
 
+    // 🎯 Inject role + type
     const prompt = `
-You are a professional technical interviewer.
+You are a professional interviewer.
 
-Conversation so far:
+Role: ${config.role || "Software Engineer"}
+Interview Type: ${config.type}
+
+Conversation:
 ${history}
 
 Rules:
 - Do NOT repeat questions
-- Ask only ONE question at a time
-- If candidate asks something → answer it first
-- If candidate gives short answer → ask follow-up
-- If answer is complete → move forward naturally
-- Be conversational
+- Ask ONE question only
+- If candidate asks → answer first
+- Match difficulty based on type
+- Be realistic interviewer
 
-Respond as interviewer:
+Respond:
 `;
 
     let aiText = "";
@@ -160,7 +171,7 @@ Respond as interviewer:
 
         try {
           aiText = await (window as any).puter.ai.chat(prompt);
-          setError(`⚠️ Gemini disabled: ${err.message}`);
+          setError(`⚠️ Gemini failed: ${err.message}`);
         } catch {
           setError("AI failed");
           return;
@@ -182,7 +193,6 @@ Respond as interviewer:
     setTranscript((t) => [...t, `Interviewer: ${aiText}`]);
   };
 
-  // 🎤 Mic toggle
   const handleMic = () => {
     if (!isRecording) {
       start();
@@ -196,32 +206,20 @@ Respond as interviewer:
   };
 
   return (
-    <div className="h-screen flex bg-black text-white relative">
+    <div className="h-screen flex bg-black text-white">
       {/* LEFT */}
       <div className="flex-1 grid grid-cols-2 gap-4 p-4">
         {personas.map((p) => (
-          <div
-            key={p.id}
-            className="bg-zinc-900 rounded-xl flex flex-col items-center justify-center"
-          >
-            <div className="w-20 h-20 rounded-full bg-purple-500 mb-2" />
-            <span>{p.name}</span>
+          <div key={p.id} className="bg-zinc-900 rounded-xl flex items-center justify-center">
+            {p.name}
           </div>
         ))}
 
-        <div className="bg-zinc-900 rounded-xl overflow-hidden relative">
+        <div className="bg-zinc-900 rounded-xl">
           {isCameraOn ? (
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              className="w-full h-full object-cover"
-            />
+            <video ref={videoRef} autoPlay muted playsInline className="w-full h-full" />
           ) : (
-            <div className="flex items-center justify-center h-full text-zinc-500">
-              Camera Off
-            </div>
+            <div className="flex items-center justify-center h-full">Camera Off</div>
           )}
         </div>
       </div>
@@ -229,14 +227,10 @@ Respond as interviewer:
       {/* RIGHT */}
       <div className="w-80 border-l border-zinc-800 flex flex-col">
         <div className="p-3 text-sm font-semibold">
-          Transcript ({config.duration} min)
+          {config.role} • {config.type} • {config.duration} min
         </div>
 
-        {error && (
-          <div className="bg-red-500 text-xs p-2 m-2 rounded">
-            {error}
-          </div>
-        )}
+        {error && <div className="bg-red-500 p-2 text-xs">{error}</div>}
 
         <div className="flex-1 overflow-y-auto p-3 text-xs space-y-2">
           {transcript.map((t, i) => (
@@ -244,12 +238,11 @@ Respond as interviewer:
           ))}
         </div>
 
-        <div className="border-t border-zinc-800 p-2 flex gap-2">
+        <div className="p-2 flex gap-2">
           <input
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
-            className="flex-1 px-3 py-2 bg-transparent border border-zinc-700 rounded-md text-sm"
-            placeholder="Type your answer..."
+            className="flex-1 bg-zinc-800 px-2"
           />
           <Button
             onClick={() => {
@@ -262,50 +255,11 @@ Respond as interviewer:
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4 bg-zinc-900/80 px-4 py-2 rounded-xl border border-zinc-700">
-        
-        <Button
-          onClick={handleMic}
-          className={`w-12 h-12 rounded-full ${
-            isRecording ? "bg-red-500" : "bg-zinc-800"
-          }`}
-        >
-          Mic
-        </Button>
-
-        <Button
-          onClick={toggleCamera}
-          className={`w-12 h-12 rounded-full ${
-            isCameraOn ? "bg-green-500" : "bg-zinc-800"
-          }`}
-        >
-          Camera
-        </Button>
-
-        <Button
-          variant="destructive"
-          className="w-12 h-12 rounded-full"
-          onClick={() => {
-            stop();
-            speechSynthesis.cancel();
-            streamRef.current?.getTracks().forEach((t) => t.stop());
-            router.push("/");
-          }}
-        >
-          End
-        </Button>
-
-        <Button
-          variant="outline"
-          className="w-12 h-12 rounded-full"
-          onClick={() => {
-            stop();
-            router.push("/interview-prep/chat");
-          }}
-        >
-          Chat
-        </Button>
+      {/* CONTROLS */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex gap-4">
+        <Button onClick={handleMic}>🎤</Button>
+        <Button onClick={toggleCamera}>📷</Button>
+        <Button onClick={() => router.push("/")}>❌</Button>
       </div>
     </div>
   );
