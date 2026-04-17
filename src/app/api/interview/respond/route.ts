@@ -3,17 +3,17 @@ import { generateInterviewResponse } from "@/lib/interview/interviewEngine";
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, interviewer } = await req.json();
+    const { messages, persona } = await req.json();
 
     const response = await generateInterviewResponse(
       messages,
-      interviewer
+      persona
     );
 
     return NextResponse.json({ text: response });
-  } catch (err) {
+  } catch {
     return NextResponse.json(
-      { error: "Failed to generate response" },
+      { error: "Failed" },
       { status: 500 }
     );
   }
