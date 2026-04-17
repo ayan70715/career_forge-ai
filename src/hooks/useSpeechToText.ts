@@ -56,12 +56,12 @@ export function useSpeechToText() {
         }
       }
 
-      // 🟢 accumulate final
+      //  accumulate final
       if (final) {
         setFinalTranscript((prev) => prev + final);
       }
 
-      // 🟡 update live text
+      //  update live text
       setTranscript(interim);
     };
 
