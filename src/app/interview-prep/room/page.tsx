@@ -18,7 +18,6 @@ type AvatarState = "idle" | "listening" | "thinking" | "speaking";
 
 export default function InterviewRoomPage() {
   const router = useRouter();
-
   const personas = getDefaultPersonas();
 
   const { state: sttState, transcript: liveText, start, stop } =
@@ -31,16 +30,149 @@ export default function InterviewRoomPage() {
     useState<string>("idle");
   const [speakingIntensity, setSpeakingIntensity] = useState(0);
 
-  // ✅ NEW: config state
   const [config, setConfig] = useState<any>(null);
+  const [started, setStarted] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
 
-  // ✅ Load config from localStorage
+  // ✅ Load config
   useEffect(() => {
     const stored = localStorage.getItem("interviewConfig");
-    if (stored) {
-      setConfig(JSON.parse(stored));
-    }
+    if (stored) setConfig(JSON.parse(stored));
   }, []);
+
+  // ✅ AI starts interview
+  useEffect(() => {
+    if (!config || started) return;
+
+    const startInterview = async () => {
+      setStarted(true);
+      setCurrentSpeakerId("thinking");
+
+      const persona = personas[0];
+
+      const prompt = `Start an interview for:
+Role: ${config.role}
+Company: ${config.company}
+Type: ${config.type}
+Difficulty: ${config.difficulty}
+
+Ask the first question only.`;
+
+      const res = await fetch("/api/interview/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: prompt }],
+          persona,
+          config,
+        }),
+      });
+
+      const data = await res.json();
+      const aiText = data.text;
+
+      let running = true;
+      const animate = () => {
+        if (!running) return;
+        setSpeakingIntensity(Math.random());
+        requestAnimationFrame(animate);
+      };
+      animate();
+
+      setCurrentSpeakerId(persona.id);
+
+      speak(aiText, undefined, () => {
+        running = false;
+        setSpeakingIntensity(0);
+        setCurrentSpeakerId("idle");
+      });
+
+      setMessages([{ role: "assistant", content: aiText }]);
+      setTranscript([`${persona.name}: ${aiText}`]);
+    };
+
+    startInterview();
+  }, [config]);
+
+  // 🎤 Toggle mic
+  const handleMicToggle = async () => {
+    if (!isRecording) {
+      speechSynthesis.cancel();
+      setCurrentSpeakerId("you");
+      start();
+      setIsRecording(true);
+    } else {
+      stop();
+      setIsRecording(false);
+
+      if (!liveText.trim()) return;
+
+      const userText = liveText;
+
+      const updatedMessages: Message[] = [
+        ...messages,
+        { role: "user", content: userText },
+      ];
+
+      setMessages(updatedMessages);
+      setTranscript((t) => [...t, `You: ${userText}`]);
+
+      setCurrentSpeakerId("thinking");
+
+      const persona =
+        Math.random() > 0.5 ? personas[0] : personas[1];
+
+      const res = await fetch("/api/interview/respond", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: updatedMessages,
+          persona,
+          config,
+        }),
+      });
+
+      const data = await res.json();
+      const aiText = data.text;
+
+      let running = true;
+      const animate = () => {
+        if (!running) return;
+        setSpeakingIntensity(
+          (prev) => prev * 0.6 + Math.random() * 0.4
+        );
+        requestAnimationFrame(animate);
+      };
+      animate();
+
+      setCurrentSpeakerId(persona.id);
+
+      speak(aiText, undefined, () => {
+        running = false;
+        setSpeakingIntensity(0);
+        setCurrentSpeakerId("idle");
+      });
+
+      setMessages([
+        ...updatedMessages,
+        { role: "assistant", content: aiText },
+      ]);
+
+      setTranscript((t) => [
+        ...t,
+        `${persona.name}: ${aiText}`,
+      ]);
+    }
+  };
+
+  // 🛑 End interview
+  const handleEndInterview = () => {
+    speechSynthesis.cancel();
+    stop();
+    router.push("/interview-prep");
+  };
 
   // 🎭 Avatar mapping
   const mappedInterviewers = personas.map((p) => ({
@@ -53,100 +185,6 @@ export default function InterviewRoomPage() {
         ? ("speaking" as AvatarState)
         : ("idle" as AvatarState),
   }));
-
-  // 🔊 Voice mapping
-  const voiceMap: Record<string, string> = {
-    Amit: "Google UK English Male",
-    Riya: "Google UK English Female",
-  };
-
-  // 📡 API call
-  async function getAIResponse(
-    updatedMessages: Message[],
-    persona: any
-  ) {
-    const res = await fetch("/api/interview/respond", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messages: updatedMessages,
-        persona,
-        config, // ✅ pass config to backend
-      }),
-    });
-
-    const data = await res.json();
-    return data.text;
-  }
-
-  // 🎤 Start speaking
-  const handleStartSpeaking = () => {
-    speechSynthesis.cancel();
-    setCurrentSpeakerId("you");
-    start();
-  };
-
-  // 🛑 Stop speaking
-  const handleStopSpeaking = async () => {
-    stop();
-
-    if (!liveText.trim()) return;
-
-    const userText = liveText;
-
-    const updatedMessages: Message[] = [
-      ...messages,
-      { role: "user", content: userText },
-    ];
-
-    setMessages(updatedMessages);
-    setTranscript((t) => [...t, `You: ${userText}`]);
-
-    setCurrentSpeakerId("thinking");
-
-    const persona =
-      Math.random() > 0.5 ? personas[0] : personas[1];
-
-    const aiText = await getAIResponse(updatedMessages, persona);
-
-    let running = true;
-
-    const animate = () => {
-      if (!running) return;
-
-      setSpeakingIntensity(
-        (prev) => prev * 0.6 + Math.random() * 0.4
-      );
-
-      requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    setCurrentSpeakerId(persona.id);
-
-    speak(
-      aiText,
-      voiceMap[persona.name],
-      () => {
-        running = false;
-        setSpeakingIntensity(0);
-        setCurrentSpeakerId("idle");
-      }
-    );
-
-    setMessages([
-      ...updatedMessages,
-      { role: "assistant", content: aiText },
-    ]);
-
-    setTranscript((t) => [
-      ...t,
-      `${persona.name}: ${aiText}`,
-    ]);
-  };
 
   return (
     <div className="h-screen flex flex-col">
@@ -169,7 +207,6 @@ export default function InterviewRoomPage() {
             speakingIntensity={speakingIntensity}
           />
 
-          {/* Candidate */}
           <div className="flex flex-col items-center gap-2">
             <Avatar
               name="You"
@@ -198,9 +235,7 @@ export default function InterviewRoomPage() {
 
           <div className="flex-1 overflow-y-auto text-xs space-y-2 pr-2">
             {transcript.map((line, i) => (
-              <div key={i} className="text-muted-foreground">
-                {line}
-              </div>
+              <div key={i}>{line}</div>
             ))}
 
             {sttState === "listening" && (
@@ -215,26 +250,28 @@ export default function InterviewRoomPage() {
       {/* Bottom */}
       <div className="border-t border-glass-border p-4 flex justify-center gap-4">
         <Button
-          variant="outline"
-          onMouseDown={handleStartSpeaking}
-          onMouseUp={handleStopSpeaking}
-          disabled={
-            currentSpeakerId !== "idle" &&
-            currentSpeakerId !== "you"
-          }
+          onClick={handleMicToggle}
+          className={`transition-all ${
+            isRecording ? "scale-95 bg-red-500" : ""
+          }`}
         >
-          🎤 Hold to Speak
+          {isRecording ? "🛑 Stop" : "🎤 Speak"}
         </Button>
 
-        <Button variant="destructive">
+        <Button
+          variant="destructive"
+          onClick={handleEndInterview}
+          className="active:scale-95"
+        >
           End Interview
         </Button>
 
         <Button
           variant="outline"
           onClick={() => router.push("/interview-prep/chat")}
+          className="active:scale-95"
         >
-          💬 Switch to Chat
+          💬 Chat
         </Button>
       </div>
     </div>
