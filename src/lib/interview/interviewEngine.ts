@@ -39,9 +39,9 @@ Company Style: ${persona?.company || "Tech"}
       m.role === "user"
         ? `Candidate: ${m.content}`
         : `Interviewer: ${m.content}`
-    )
-    .join("\n");
+    ).join("\n");
 
+  
   // 🧾 Final prompt
   const finalPrompt = `
 ${systemPrompt}
