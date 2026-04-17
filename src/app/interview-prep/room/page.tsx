@@ -80,7 +80,7 @@ export default function InterviewRoomPage() {
   const handleUserMessage = async (userText: string) => {
     if (!userText.trim()) return;
 
-    const updated = [
+    const updated: Message[] = [
       ...messages,
       { role: "user", content: userText },
     ];
@@ -106,7 +106,7 @@ export default function InterviewRoomPage() {
 
     setMessages([
       ...updated,
-      { role: "assistant", content: aiText },
+      { role: "assistant" as const, content: aiText },
     ]);
 
     setTranscript((t) => [
