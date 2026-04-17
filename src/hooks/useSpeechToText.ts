@@ -29,19 +29,19 @@ export function useSpeechToText() {
 
     const recognition = new SpeechRecognition();
 
-    // ✅ CONFIG
+    // CONFIG
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
-    // 🎤 Start
+    // Start
     recognition.onstart = () => {
       setState("listening");
       setTranscript("");
-      setFinalTranscript(""); // 🔥 reset each session
+      setFinalTranscript(""); // reset each session
     };
 
-    // 🧠 Result handling (FIXED)
+    // Result handling (FIXED)
     recognition.onresult = (event: any) => {
       let interim = "";
       let final = "";
