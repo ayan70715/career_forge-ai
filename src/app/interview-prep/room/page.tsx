@@ -13,6 +13,8 @@ type Message = {
   content: string;
 };
 
+type AvatarState = "idle" | "listening" | "thinking" | "speaking";
+
 export default function InterviewRoomPage() {
   const personas = getDefaultPersonas();
 
@@ -26,16 +28,16 @@ export default function InterviewRoomPage() {
     useState<string>("idle");
   const [speakingIntensity, setSpeakingIntensity] = useState(0);
 
-  // 🎭 Avatar mapping
+  // 🎭 Avatar mapping (FIXED TYPE)
   const mappedInterviewers = personas.map((p) => ({
     id: p.id,
     name: p.name,
     state:
       currentSpeakerId === "thinking"
-        ? "thinking"
+        ? ("thinking" as AvatarState)
         : currentSpeakerId === p.id
-        ? "speaking"
-        : "idle",
+        ? ("speaking" as AvatarState)
+        : ("idle" as AvatarState),
   }));
 
   // 🔊 Voice mapping
@@ -66,7 +68,7 @@ export default function InterviewRoomPage() {
 
   // 🎤 Start speaking
   const handleStartSpeaking = () => {
-    speechSynthesis.cancel(); // interrupt AI
+    speechSynthesis.cancel();
     setCurrentSpeakerId("you");
     start();
   };
@@ -94,7 +96,6 @@ export default function InterviewRoomPage() {
 
     const aiText = await getAIResponse(updatedMessages, persona);
 
-    // 🔥 animation loop
     let running = true;
 
     const animate = () => {
@@ -109,7 +110,6 @@ export default function InterviewRoomPage() {
 
     animate();
 
-    // 🔊 Speak AI
     setCurrentSpeakerId(persona.id);
 
     speak(
@@ -122,7 +122,6 @@ export default function InterviewRoomPage() {
       }
     );
 
-    // 🧠 Save AI response
     setMessages([
       ...updatedMessages,
       { role: "assistant", content: aiText },
