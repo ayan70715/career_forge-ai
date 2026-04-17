@@ -3,7 +3,7 @@
 import AvatarGrid from "@/components/interview/AvatarGrid";
 import Avatar from "@/components/interview/Avatar";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import { getDefaultPersonas } from "@/lib/interview/personaGenerator";
@@ -18,6 +18,7 @@ type AvatarState = "idle" | "listening" | "thinking" | "speaking";
 
 export default function InterviewRoomPage() {
   const router = useRouter();
+
   const personas = getDefaultPersonas();
 
   const { state: sttState, transcript: liveText, start, stop } =
@@ -30,7 +31,18 @@ export default function InterviewRoomPage() {
     useState<string>("idle");
   const [speakingIntensity, setSpeakingIntensity] = useState(0);
 
-  // 🎭 Avatar mapping (FIXED TYPE)
+  // ✅ NEW: config state
+  const [config, setConfig] = useState<any>(null);
+
+  // ✅ Load config from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem("interviewConfig");
+    if (stored) {
+      setConfig(JSON.parse(stored));
+    }
+  }, []);
+
+  // 🎭 Avatar mapping
   const mappedInterviewers = personas.map((p) => ({
     id: p.id,
     name: p.name,
@@ -61,6 +73,7 @@ export default function InterviewRoomPage() {
       body: JSON.stringify({
         messages: updatedMessages,
         persona,
+        config, // ✅ pass config to backend
       }),
     });
 
@@ -143,7 +156,7 @@ export default function InterviewRoomPage() {
           AI Interview Room
         </span>
         <span className="text-xs text-muted-foreground">
-          Live
+          {config?.role || "Live"}
         </span>
       </div>
 
@@ -216,11 +229,12 @@ export default function InterviewRoomPage() {
         <Button variant="destructive">
           End Interview
         </Button>
+
         <Button
           variant="outline"
           onClick={() => router.push("/interview-prep/chat")}
         >
-          Switch to Chat
+          💬 Switch to Chat
         </Button>
       </div>
     </div>
