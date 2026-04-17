@@ -20,8 +20,14 @@ export default function InterviewRoomPage() {
   const router = useRouter();
   const personas = getDefaultPersonas();
 
-  const { state: sttState, transcript: liveText, start, stop } =
-    useSpeechToText();
+  const {
+    state: sttState,
+    transcript: liveText,
+    finalTranscript,
+    start,
+    stop,
+  } = useSpeechToText();
+
   const { speak } = useTextToSpeech();
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -108,75 +114,69 @@ Ask the first question only.`;
       stop();
       setIsRecording(false);
 
-      // ⏳ wait for STT finalize
-      setTimeout(async () => {
-        if (!liveText.trim()) {
-          console.warn("No speech detected");
-          return;
-        }
+      const userText = finalTranscript || liveText;
 
-        console.log("Captured speech:", liveText);
+      if (!userText.trim()) {
+        console.warn("No speech detected");
+        return;
+      }
 
-        const userText = liveText;
+      const updatedMessages: Message[] = [
+        ...messages,
+        { role: "user", content: userText },
+      ];
 
-        const updatedMessages: Message[] = [
-          ...messages,
-          { role: "user", content: userText },
-        ];
+      setMessages(updatedMessages);
+      setTranscript((t) => [...t, `You: ${userText}`]);
 
-        setMessages(updatedMessages);
-        setTranscript((t) => [...t, `You: ${userText}`]);
+      setCurrentSpeakerId("thinking");
 
-        setCurrentSpeakerId("thinking");
+      const persona =
+        Math.random() > 0.5 ? personas[0] : personas[1];
 
-        const persona =
-          Math.random() > 0.5 ? personas[0] : personas[1];
+      const res = await fetch("/api/interview/respond", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: updatedMessages,
+          persona,
+          config,
+        }),
+      });
 
-        const res = await fetch("/api/interview/respond", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: updatedMessages,
-            persona,
-            config,
-          }),
-        });
+      const data = await res.json();
+      const aiText =
+        data.text || "Could you please repeat that?";
 
-        const data = await res.json();
+      let running = true;
+      const animate = () => {
+        if (!running) return;
+        setSpeakingIntensity(
+          (prev) => prev * 0.6 + Math.random() * 0.4
+        );
+        requestAnimationFrame(animate);
+      };
+      animate();
 
-        const aiText =
-          data.text || "Could you please repeat that?";
+      setCurrentSpeakerId(persona.id);
 
-        let running = true;
-        const animate = () => {
-          if (!running) return;
-          setSpeakingIntensity(
-            (prev) => prev * 0.6 + Math.random() * 0.4
-          );
-          requestAnimationFrame(animate);
-        };
-        animate();
+      speak(aiText, undefined, () => {
+        running = false;
+        setSpeakingIntensity(0);
+        setCurrentSpeakerId("idle");
+      });
 
-        setCurrentSpeakerId(persona.id);
+      setMessages([
+        ...updatedMessages,
+        { role: "assistant", content: aiText },
+      ]);
 
-        speak(aiText, undefined, () => {
-          running = false;
-          setSpeakingIntensity(0);
-          setCurrentSpeakerId("idle");
-        });
-
-        setMessages([
-          ...updatedMessages,
-          { role: "assistant", content: aiText },
-        ]);
-
-        setTranscript((t) => [
-          ...t,
-          `${persona.name}: ${aiText}`,
-        ]);
-      }, 300);
+      setTranscript((t) => [
+        ...t,
+        `${persona.name}: ${aiText}`,
+      ]);
     }
   };
 
@@ -214,7 +214,7 @@ Ask the first question only.`;
       {/* Main */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left */}
-        <div className="flex-1 flex flex-col items-center justify-center gap-10 p-6">
+        <div className="flex flex-col items-center justify-center gap-10 p-6 flex-1">
           <AvatarGrid
             interviewers={mappedInterviewers}
             speakingIntensity={speakingIntensity}
@@ -264,7 +264,7 @@ Ask the first question only.`;
       <div className="border-t border-glass-border p-4 flex justify-center gap-4">
         <Button
           onClick={handleMicToggle}
-          className={`transition-all ${
+          className={`transition ${
             isRecording ? "scale-95 bg-red-500" : ""
           }`}
         >
