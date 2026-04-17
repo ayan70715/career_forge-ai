@@ -255,30 +255,55 @@ Respond:
         </div>
       </div>
 
-      {/* CONTROLS */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex gap-4">
-        <Button 
-          className={`py-3 rounded-lg border transition-all duration-200 active:scale-90 ${
-            type === item.key
-            ? "bg-purple-600 border-purple-500 scale-95"
-            : "bg-zinc-800 border-zinc-700 hover:bg-zinc-700"
-          }`}
-          onClick={handleMic}>🎤</Button>
-        <Button
-          className={`py-3 rounded-lg border transition-all duration-200 active:scale-90 ${
-           type === item.key
-           ? "bg-purple-600 border-purple-500 scale-95"
-           : "bg-zinc-800 border-zinc-700 hover:bg-zinc-700"
-          }`}
-          onClick={toggleCamera}>📷</Button>
-        <Button 
-          className={`py-3 rounded-lg border transition-all duration-200 active:scale-90 ${
-          type === item.key
-          ? "bg-purple-600 border-purple-500 scale-95"
-          : "bg-zinc-800 border-zinc-700 hover:bg-zinc-700"
-          }`}
-          onClick={() => router.push("/")}>❌</Button>
-      </div>
-    </div>
+  {/* Controls */}
+  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4 bg-zinc-900/80 px-4 py-2 rounded-xl border border-zinc-700 shadow-lg">
+   {/* 🎤 Mic */}
+  <Button
+    onClick={handleMic}
+    className={`w-14 h-14 rounded-full text-xl transition-all duration-200 active:scale-90 ${
+      isRecording
+        ? "bg-red-500 hover:bg-red-600"
+        : "bg-zinc-800 hover:bg-zinc-700"
+    }`}
+  >
+    🎤
+  </Button>
+
+  {/* 📷 Camera */}
+  <Button
+    onClick={toggleCamera}
+    className={`w-14 h-14 rounded-full text-xl transition-all duration-200 active:scale-90 ${
+      isCameraOn
+        ? "bg-green-500 hover:bg-green-600"
+        : "bg-zinc-800 hover:bg-zinc-700"
+    }`}
+  >
+    📷
+  </Button>
+
+  {/* ❌ End */}
+  <Button
+    onClick={() => {
+      stop();
+      speechSynthesis.cancel();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      router.push("/");
+    }}
+    className="w-14 h-14 rounded-full text-xl bg-red-600 hover:bg-red-700 transition-all duration-200 active:scale-90"
+  >
+    ❌
+  </Button>
+
+  {/* 💬 Chat */}
+  <Button
+    onClick={() => {
+      stop();
+      router.push("/interview-prep/chat");
+    }}
+    className="w-14 h-14 rounded-full text-xl bg-zinc-800 hover:bg-zinc-700 transition-all duration-200 active:scale-90"
+  >
+    💬
+  </Button>
+</div>
   );
 }
