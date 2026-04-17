@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import { getDefaultPersonas } from "@/lib/interview/personaGenerator";
+import { useRouter } from "next/navigation";
 
 type Message = {
   role: "user" | "assistant";
@@ -12,8 +13,8 @@ type Message = {
 };
 
 export default function InterviewRoomPage() {
+  const router = useRouter();
   const personas = getDefaultPersonas();
-
   const { speak } = useTextToSpeech();
   const { start, stop, transcript: liveText, finalTranscript } =
     useSpeechToText();
@@ -23,6 +24,7 @@ export default function InterviewRoomPage() {
   const [textInput, setTextInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [geminiFailed, setGeminiFailed] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -40,11 +42,10 @@ export default function InterviewRoomPage() {
         console.log("Camera not available");
       }
     }
-
     initCamera();
   }, []);
 
-  // 🤖 Load Puter (fallback)
+  // 🤖 Load Puter fallback
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://js.puter.com/v2/";
@@ -79,40 +80,50 @@ export default function InterviewRoomPage() {
     let aiText = "";
     const persona = personas[0];
 
-    try {
-      // 🔥 Primary: Gemini (API)
-      const res = await fetch("/api/interview/respond", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: updated,
-          persona,
-        }),
-      });
+    if (!geminiFailed) {
+      try {
+        const res = await fetch("/api/interview/respond", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: updated,
+            persona,
+          }),
+        });
 
-      const data = await res.json();
+        const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error);
+        if (!res.ok) {
+          throw new Error(data.error);
+        }
+
+        aiText = data.text;
+      } catch (err: any) {
+        console.error("Gemini failed:", err);
+
+        setGeminiFailed(true);
+
+        try {
+          aiText = await (window as any).puter.ai.chat(
+            `You are a technical interviewer.\nCandidate said: ${userText}\nAsk the next relevant interview question.`
+          );
+
+          setError(`⚠️ Gemini disabled: ${err.message}`);
+        } catch {
+          setError("Both AI systems failed");
+          return;
+        }
       }
-
-      aiText = data.text;
-    } catch (err: any) {
-      console.error("Gemini failed:", err);
-
-      // ⚡ Fallback: Puter
+    } else {
+      // 🚀 direct fallback (no delay)
       try {
         aiText = await (window as any).puter.ai.chat(
-          `You are a technical interviewer.\nCandidate said: ${userText}\nRespond with next question.`
-        );
-
-        setError(
-          `⚠️ Gemini failed: ${err.message} (fallback used)`
+          `You are a technical interviewer.\nCandidate said: ${userText}\nAsk the next relevant interview question.`
         );
       } catch {
-        setError("Both AI systems failed");
+        setError("Fallback AI failed");
         return;
       }
     }
@@ -122,10 +133,7 @@ export default function InterviewRoomPage() {
       { role: "assistant", content: aiText },
     ]);
 
-    setTranscript((t) => [
-      ...t,
-      `Interviewer: ${aiText}`,
-    ]);
+    setTranscript((t) => [...t, `Interviewer: ${aiText}`]);
 
     speak(aiText);
   };
@@ -158,6 +166,7 @@ export default function InterviewRoomPage() {
           </div>
         ))}
 
+        {/* User camera */}
         <div className="bg-zinc-900 rounded-xl overflow-hidden relative">
           <video
             ref={videoRef}
@@ -210,12 +219,33 @@ export default function InterviewRoomPage() {
       </div>
 
       {/* Controls */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4">
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4 bg-zinc-900/80 backdrop-blur px-4 py-2 rounded-xl border border-zinc-700">
+        {/* Mic */}
         <Button
           onClick={handleMic}
-          className={isRecording ? "bg-red-500" : ""}
+          className={`rounded-full w-12 h-12 ${
+            isRecording ? "bg-red-500" : "bg-zinc-800"
+          } active:scale-90 transition`}
         >
-          🎤
+          Mic
+        </Button>
+
+        {/* End */}
+        <Button
+          variant="destructive"
+          className="rounded-full w-12 h-12 active:scale-90 transition"
+          onClick={() => window.location.reload()}
+        >
+          End
+        </Button>
+
+        {/* Chat */}
+        <Button
+          variant="outline"
+          className="rounded-full w-12 h-12 active:scale-90 transition"
+          onClick={() => router.push("/interview-prep/chat")}
+        >
+          Chat Mode
         </Button>
       </div>
     </div>
