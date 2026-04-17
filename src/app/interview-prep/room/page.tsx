@@ -24,10 +24,11 @@ export default function InterviewRoomPage() {
   const [transcript, setTranscript] = useState<string[]>([]);
   const [textInput, setTextInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // 🎥 CAMERA SETUP
+  // 🎥 CAMERA
   useEffect(() => {
     async function initCamera() {
       try {
@@ -45,40 +46,21 @@ export default function InterviewRoomPage() {
     initCamera();
   }, []);
 
-  // 🤖 AI STARTS INTERVIEW
+  // 🤖 FIRST QUESTION
   useEffect(() => {
-    const startInterview = async () => {
-      const persona = personas[0];
+    const first = "Tell me about yourself.";
 
-      const res = await fetch("/api/interview/respond", {
-        method: "POST",
-        body: JSON.stringify({
-          messages: [
-            {
-              role: "user",
-              content:
-                "Start interview. Ask first question only.",
-            },
-          ],
-          persona,
-        }),
-      });
+    speak(first);
 
-      const data = await res.json();
-      const aiText = data.text || "Tell me about yourself.";
-
-      speak(aiText);
-
-      setMessages([{ role: "assistant", content: aiText }]);
-      setTranscript([`Interviewer: ${aiText}`]);
-    };
-
-    startInterview();
+    setMessages([{ role: "assistant", content: first }]);
+    setTranscript([`Interviewer: ${first}`]);
   }, []);
 
   // 🧠 HANDLE MESSAGE
   const handleUserMessage = async (userText: string) => {
     if (!userText.trim()) return;
+
+    setError(null);
 
     const updated: Message[] = [
       ...messages,
@@ -88,34 +70,45 @@ export default function InterviewRoomPage() {
     setMessages(updated);
     setTranscript((t) => [...t, `You: ${userText}`]);
 
-    const persona =
-      Math.random() > 0.5 ? personas[0] : personas[1];
+    try {
+      const res = await fetch("/api/interview/respond", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: updated,
+          persona: personas[0],
+        }),
+      });
 
-    const res = await fetch("/api/interview/respond", {
-      method: "POST",
-      body: JSON.stringify({
-        messages: updated,
-        persona,
-      }),
-    });
+      const data = await res.json();
 
-    const data = await res.json();
-    const aiText = data.text || "Please continue.";
+      if (!res.ok) {
+        setError(data.error || "AI failed");
+        return;
+      }
 
-    speak(aiText);
+      const aiText = data.text;
 
-    setMessages([
-      ...updated,
-      { role: "assistant" as const, content: aiText },
-    ]);
+      setMessages([
+        ...updated,
+        { role: "assistant", content: aiText },
+      ]);
 
-    setTranscript((t) => [
-      ...t,
-      `Interviewer: ${aiText}`,
-    ]);
+      setTranscript((t) => [
+        ...t,
+        `Interviewer: ${aiText}`,
+      ]);
+
+      speak(aiText);
+    } catch (err: any) {
+      console.error(err);
+      setError("Network or AI failure");
+    }
   };
 
-  // 🎤 MIC TOGGLE
+  // 🎤 MIC
   const handleMic = () => {
     if (!isRecording) {
       start();
@@ -123,32 +116,26 @@ export default function InterviewRoomPage() {
     } else {
       stop();
       setIsRecording(false);
+
       const text = finalTranscript || liveText;
       handleUserMessage(text);
     }
   };
 
-  // 📞 END CALL
-  const endInterview = () => {
-    router.push("/interview-prep");
-  };
-
   return (
     <div className="h-screen flex bg-black text-white relative">
-      {/* LEFT: VIDEO GRID */}
+      {/* LEFT */}
       <div className="flex-1 grid grid-cols-2 gap-4 p-4">
-        {/* AI Tiles */}
         {personas.map((p) => (
           <div
             key={p.id}
             className="bg-zinc-900 rounded-xl flex flex-col items-center justify-center"
           >
             <div className="w-20 h-20 rounded-full bg-purple-500 mb-2" />
-            <span className="text-sm">{p.name}</span>
+            <span>{p.name}</span>
           </div>
         ))}
 
-        {/* USER CAMERA */}
         <div className="bg-zinc-900 rounded-xl overflow-hidden relative">
           <video
             ref={videoRef}
@@ -162,11 +149,18 @@ export default function InterviewRoomPage() {
         </div>
       </div>
 
-      {/* RIGHT: TRANSCRIPT */}
+      {/* RIGHT */}
       <div className="w-80 border-l border-zinc-800 flex flex-col">
         <div className="p-3 text-sm font-semibold">
           Transcript
         </div>
+
+        {/* 🚨 ERROR */}
+        {error && (
+          <div className="bg-red-500 text-white text-xs p-2 m-2 rounded">
+            ⚠️ {error}
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-3 text-xs space-y-2">
           {transcript.map((t, i) => (
@@ -194,17 +188,13 @@ export default function InterviewRoomPage() {
         </div>
       </div>
 
-      {/* 🎮 CONTROLS */}
+      {/* CONTROLS */}
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4">
         <Button
           onClick={handleMic}
           className={isRecording ? "bg-red-500" : ""}
         >
           🎤
-        </Button>
-
-        <Button variant="destructive" onClick={endInterview}>
-          📞
         </Button>
       </div>
     </div>
