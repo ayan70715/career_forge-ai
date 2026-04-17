@@ -36,10 +36,8 @@ export function useSpeechToText() {
       let text = "";
 
       // ✅ FIXED LOOP (important)
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      for (let i = event.resultIndex; i < event.results.length; i++)
         text += event.results[i][0].transcript;
-      }
-
       setTranscript(text);
     };
 
