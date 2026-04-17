@@ -12,9 +12,10 @@ interface Interviewer {
 
 interface AvatarGridProps {
   interviewers: Interviewer[];
+  speakingIntensity: number;
 }
 
-export default function AvatarGrid({ interviewers }: AvatarGridProps) {
+export default function AvatarGrid({ interviewers, speakingIntensity }: AvatarGridProps) {
   const count = interviewers.length;
 
   // 🧠 Layout logic
@@ -30,7 +31,12 @@ export default function AvatarGrid({ interviewers }: AvatarGridProps) {
       {count <= 2 && (
         <div className={getGridClass()}>
           {interviewers.map((i) => (
-            <Avatar key={i.id} name={i.name} state={i.state} />
+            <Avatar
+               key={i.id}
+               name={i.name}
+               state={i.state}
+               intensity={i.state === "speaking" ? speakingIntensity : 0}
+            />
           ))}
         </div>
       )}
