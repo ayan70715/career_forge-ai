@@ -11,7 +11,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 const ADZUNA_APP_ID = process.env.ADZUNA_APP_ID!;
 const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY!;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY!;
 
 // Adzuna city slug map
 const CITY_SLUGS: Record<string, string> = {
@@ -103,81 +102,6 @@ function extractTrendingSkills(jobs: AdzunaJob[]): string[] {
     .slice(0, 20);
 }
 
-async function runGeminiAnalysis(params: {
-  resume: string;
-  jd: string;
-  role: string;
-  city: string;
-  salaryMin: number;
-  salaryMax: number;
-  trendingSkills: string[];
-  totalJobs: number;
-}) {
-  const prompt = `
-You are a career analyst specialising in the Indian tech job market.
-
-ROLE: ${params.role}
-CITY: ${params.city}
-LIVE MARKET DATA:
-- ${params.totalJobs} active listings found on Adzuna India
-- Salary range: ₹${params.salaryMin}L – ₹${params.salaryMax}L per annum
-- Top trending skills in market: ${params.trendingSkills.join(", ")}
-
-CANDIDATE RESUME:
-${params.resume.slice(0, 3000)}
-
-JOB DESCRIPTION (if provided):
-${params.jd ? params.jd.slice(0, 2000) : "Not provided — analyse against role generally"}
-
-TASK: Analyse the candidate's fit and return ONLY valid JSON (no markdown, no backticks):
-{
-  "compatibilityScore": <0-100 integer>,
-  "userSalaryEstimate": <integer in LPA where this candidate would land in the ${params.salaryMin}–${params.salaryMax} range>,
-  "matchedSkills": [<up to 8 skills from their resume that match market demand>],
-  "missingSkills": [
-    { "skill": "<skill name>", "urgency": "critical" | "important" | "nice" }
-  ],
-  "cheatSheet": [
-    { "question": "<likely interview question for this role>", "hint": "<2 sentence answer hint>" },
-    { "question": "...", "hint": "..." },
-    { "question": "...", "hint": "..." }
-  ],
-  "summary": "<2 sentence honest assessment of candidate fit>"
-}
-
-Rules:
-- compatibilityScore must reflect resume vs JD/role match HONESTLY
-- missingSkills must only list skills genuinely absent from resume
-- userSalaryEstimate must be between ${params.salaryMin} and ${params.salaryMax}
-- cheatSheet questions must be specific to the role and city market
-- Return ONLY the JSON object, nothing else
-`;
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
-      }),
-    }
-  );
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Gemini error: ${err}`);
-  }
-
-  const data = await res.json();
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-  // Strip any markdown fences if Gemini added them despite instructions
-  const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-  return JSON.parse(cleaned);
-}
-
 // ─────────────────────────────────────────────────────
 // POST /api/job-analyser/analyse
 // ─────────────────────────────────────────────────────
@@ -221,33 +145,6 @@ export async function POST(req: NextRequest) {
       salaryStats = { ...fb, count: 0 };
       totalJobs = 0;
     }
-
-    // 2. Run Gemini analysis
-    const geminiResult = await runGeminiAnalysis({
-      resume,
-      jd: jd || "",
-      role: targetRole,
-      city: targetCity,
-      salaryMin: salaryStats.min,
-      salaryMax: salaryStats.max,
-      trendingSkills,
-      totalJobs,
-    });
-
-    // 3. Compose final response
-    return NextResponse.json({
-      compatibilityScore: geminiResult.compatibilityScore,
-      salaryMin: salaryStats.min,
-      salaryMax: salaryStats.max,
-      userSalaryEstimate: geminiResult.userSalaryEstimate,
-      matchedSkills: geminiResult.matchedSkills || [],
-      missingSkills: geminiResult.missingSkills || [],
-      cheatSheet: geminiResult.cheatSheet || [],
-      summary: geminiResult.summary || "",
-      roleTitle: targetRole,
-      city: targetCity,
-      totalJobs,
-    });
   } catch (err: any) {
     console.error("Job analyser error:", err);
     return NextResponse.json(
