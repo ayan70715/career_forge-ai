@@ -1,5 +1,6 @@
 "use client";
 
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
@@ -16,7 +17,7 @@ import {
   ChevronDown,
   ArrowRight,
   FolderSearch,
-  BarChart3,
+  Radar,
 } from "lucide-react";
   
 import { Button } from "@/components/ui/button";
@@ -55,7 +56,7 @@ export const featureItems = [
   {
     href: "/job-analyser",
     label: "Job Analyser",
-    icon: BarChart3,
+    icon: Radar,
     description: "Real-time Indian market salary & skill analysis",
     gradient: "from-blue-500 to-cyan-600",
   },
