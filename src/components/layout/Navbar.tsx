@@ -54,8 +54,8 @@ export const featureItems = [
     gradient: "from-fuchsia-500 to-indigo-600",
   },
   {
-    href: "/job-analyser",
-    label: "Job Analyser",
+    href: "/job-analyse",
+    label: "Job Analyse",
     icon: Radar,
     description: "Real-time Indian market salary & skill analysis",
     gradient: "from-blue-500 to-cyan-600",
