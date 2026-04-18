@@ -275,7 +275,7 @@ export default function InterviewRoomClient() {
         const ch = chars[i++];
         const isSpace = ch === " " || ch === "," || ch === ".";
         const isVowel = /[aeiou]/i.test(ch);
-        signals.current[speakerIdx].viseme = isSpace ? "sil" : charToViseme(ch);
+        signals.current[speakerIdx].viseme = "sil";
         signals.current[speakerIdx].amplitude = isSpace ? 0 : isVowel
           ? 0.55 + Math.random() * 0.45
           : 0.25 + Math.random() * 0.3;
