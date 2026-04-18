@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ArrowRight,
   FolderSearch,
+  BarChart3,
 } from "lucide-react";
   
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,13 @@ export const featureItems = [
     icon: FolderSearch,
     description: "Compare your resume projects against top real-world similar projects",
     gradient: "from-fuchsia-500 to-indigo-600",
+  },
+  {
+    href: "/job-analyser",
+    label: "Job Analyser",
+    icon: BarChart3,
+    description: "Real-time Indian market salary & skill analysis",
+    gradient: "from-blue-500 to-cyan-600",
   },
   {
     href: "/resume-verifier",
