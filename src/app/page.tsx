@@ -171,7 +171,7 @@ export default function HomePage() {
                     <FolderSearch className="h-4 w-4 text-white" />
                   </div>
                   <h3 className="text-sm font-semibold text-foreground group-hover:text-fuchsia-400 transition-colors">
-                    Project Analyser
+                    Project Analyse
                   </h3>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">AI-powered analysis of project strength and uniqueness</p>
@@ -189,7 +189,7 @@ export default function HomePage() {
                       <Radar className="h-4 w-4 text-white" />
                     </div>
                     <h3 className="text-sm font-semibold text-foreground group-hover:text-blue-400 transition-colors">
-                      Job Analyser
+                      Job Analyse
                     </h3>
                   </div>
                   <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20">
