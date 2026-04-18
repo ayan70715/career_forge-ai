@@ -183,7 +183,7 @@ export default function JobAnalyserPage() {
     }, 1800);
 
     try {
-      const res = await fetch("/api/job-analyser/analyse", {
+      const res = await fetch("/api/job-analyse/analyse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jd, resume, role, city }),
