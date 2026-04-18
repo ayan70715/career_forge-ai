@@ -179,7 +179,7 @@ export default function HomePage() {
             </BentoCard>
           </motion.div>
 
-          {/* Job Analyser (New Feature) */}
+          {/* Job Analyser */}
           <motion.div variants={fadeUp}>
             <BentoCard href="/job-analyser" className="h-full">
               <div className="p-5 h-full flex flex-col">
