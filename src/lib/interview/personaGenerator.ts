@@ -13,13 +13,13 @@ export function getDefaultPersonas(count: number = 2): InterviewerPersona[] {
   const all: InterviewerPersona[] = [
     {
       id: "1",
-      name: "Amit",
+      name: "Arya",
       role: "Senior Software Engineer",
       style: "strict, technical, asks deep follow-ups on implementation details",
     },
     {
       id: "2",
-      name: "Riya",
+      name: "Alok",
       role: "HR Manager",
       style: "friendly, behavioral, focuses on communication and culture fit",
     },
@@ -47,7 +47,7 @@ Interview type: ${interviewType}
 Number of interviewers: ${count}
 
 Generate ${count} distinct interviewer personas for this panel. Each persona must:
-- Have a realistic name
+- Have a realistic male name only (no female name)
 - Have a job title that makes sense for interviewing a "${targetRole || "Software Engineer"}" candidate
 - Have a unique interviewing style that matches their role (e.g. a tech lead asks technical depth questions, an HR manager asks behavioral questions, a product manager asks about problem-solving and product thinking)
 - Be diverse in their approach so the interview feels multi-dimensional
