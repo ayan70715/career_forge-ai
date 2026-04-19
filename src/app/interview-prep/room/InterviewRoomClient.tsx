@@ -116,10 +116,7 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
         }
       });
     }
-    // DEBUG — paste console output to chat
-    console.log("All actions:", Object.keys(actions));
-    console.log("Playing action:", idleAction?.getClip().name);
-    console.log("Clip tracks:", idleAction?.getClip().tracks.map(t => t.name));
+    
     scene.traverse((child) => {
       const sm = child as THREE.SkinnedMesh;
       if (sm.isSkinnedMesh && sm.morphTargetDictionary) {
@@ -130,6 +127,23 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
       if (child.name === "RightArm") rightArmBone.current = child;
       if (child.name === "LeftForeArm") leftForeArmBone.current = child;
       if (child.name === "RightForeArm") rightForeArmBone.current = child;
+      setTimeout(() => {
+          if (leftArmBone.current) {
+            console.log("LeftArm rotation:", leftArmBone.current.rotation.x.toFixed(3), leftArmBone.current.rotation.y.toFixed(3), leftArmBone.current.rotation.z.toFixed(3));
+          }
+          if (rightArmBone.current) {
+            console.log("RightArm rotation:", rightArmBone.current.rotation.x.toFixed(3), rightArmBone.current.rotation.y.toFixed(3), rightArmBone.current.rotation.z.toFixed(3));
+          }
+          if (leftForeArmBone.current) {
+            console.log("LeftForeArm rotation:", leftForeArmBone.current.rotation.x.toFixed(3), leftForeArmBone.current.rotation.y.toFixed(3), leftForeArmBone.current.rotation.z.toFixed(3));
+          }
+          if (rightForeArmBone.current) {
+            console.log("RightForeArm rotation:", rightForeArmBone.current.rotation.x.toFixed(3), rightForeArmBone.current.rotation.y.toFixed(3), rightForeArmBone.current.rotation.z.toFixed(3));
+          }
+          if (headBone.current) {
+            console.log("Head rotation:", headBone.current.rotation.x.toFixed(3), headBone.current.rotation.y.toFixed(3), headBone.current.rotation.z.toFixed(3));
+          }
+        }, 1000);
     });
 
     // DO NOT set any rotation here — let useFrame handle everything
