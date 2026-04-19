@@ -119,7 +119,7 @@ function Avatar({
     if (headBone.current) {
       headBone.current.rotation.x = THREE.MathUtils.lerp(
         headBone.current.rotation.x,
-        -0.05 + Math.sin(t * 0.35) * 0.015, 
+        -0.001 + Math.sin(t * 0.35) * 0.015, 
         0.05
       );
       headBone.current.rotation.y = THREE.MathUtils.lerp(
