@@ -262,8 +262,6 @@ function AvatarTile({
 
       <Canvas
         shadows
-        // Change position from [0, 0.15, 1.7] to [0, 0.4, 0.9] 
-        // Lower FOV (15 -> 25) helps zoom in while maintaining focus on the face
         camera={{ position: [0, 0.28, 0.69], fov: 23 }} 
         gl={{ antialias: true, alpha: true }}
         style={{ height: "100%", width: "100%", background: "transparent" }}
@@ -469,7 +467,7 @@ export default function InterviewRoomClient() {
       phase += 0.38;
       const vowels: string[] = ["aa", "O", "E", "I", "U"];
       const openness = Math.abs(Math.sin(phase * Math.PI));
-      sig.current.amplitude = 0.15 + openness * 0.35;
+      sig.current.amplitude = 0.12 + openness * 0.25;
       if (openness > 0.45) {
         sig.current.viseme = vowels[Math.floor(phase * 0.5) % vowels.length];
       } else {
@@ -726,7 +724,7 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
             // Change gridTemplateColumns and maxWidth logic
             gridTemplateColumns: interviewerCount === 1 ? "1fr" : "1fr 1fr",
             gridTemplateRows: "1fr 1fr",
-            maxWidth: interviewerCount === 1 ? "520px" : "86%", // Increased from 460px, decreased from 92%
+            maxWidth: interviewerCount === 1 ? "480px" : "80%", // Increased from 460px, decreased from 92%
             width: "100%",
             margin: "0 auto", // Center it for all modes
             alignSelf: "stretch",
