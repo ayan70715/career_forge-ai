@@ -119,7 +119,7 @@ function Avatar({
     if (headBone.current) {
       headBone.current.rotation.x = THREE.MathUtils.lerp(
         headBone.current.rotation.x,
-        0.032 + Math.sin(t * 0.35) * 0.015,
+        -0.05 + Math.sin(t * 0.35) * 0.015, 
         0.05
       );
       headBone.current.rotation.y = THREE.MathUtils.lerp(
@@ -192,7 +192,7 @@ function Avatar({
   });
 
   return (
-    <group ref={groupRef} position={[0, -1.55, 0]} rotation={[0, 0, 0]} scale={1}>
+    <group ref={groupRef} position={[0, -1.8, 0]} rotation={[0, 0, 0]} scale={1}>
       <primitive object={scene} />
     </group>
   );
@@ -236,7 +236,9 @@ function AvatarTile({
 
       <Canvas
         shadows
-        camera={{ position: [0, 0.15, 1.7], fov: 15 }}
+        // Change position from [0, 0.15, 1.7] to [0, 0.4, 0.9] 
+        // Lower FOV (15 -> 25) helps zoom in while maintaining focus on the face
+        camera={{ position: [0, 0.4, 0.9], fov: 25 }} 
         gl={{ antialias: true, alpha: true }}
         style={{ height: "100%", width: "100%", background: "transparent" }}
       >
