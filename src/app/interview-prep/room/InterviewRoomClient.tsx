@@ -186,7 +186,7 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
 
   return (
     // Position so only head + chest fills the frame
-    <group ref={groupRef} position={[0, -0.8, 0]} scale={1}>
+    <group ref={groupRef} position={[0, -1.6, 0]} scale={1}>
       <primitive object={scene} />
     </group>
   );
@@ -236,7 +236,7 @@ function AvatarTile({
 
       {/* 3D Canvas — bust/chest framing */}
       <Canvas
-        camera={{ position: [0, 1.55, 1.6], fov: 30 }}
+        camera={{ position: [0, 0.5, 1.6], fov: 30 }}
         gl={{ antialias: true, alpha: true }}
         style={{ height: "100%", width: "100%", background: "transparent" }}
       >
