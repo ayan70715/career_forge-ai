@@ -92,31 +92,6 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
   const gestureSide = useRef<"left" | "right" | "both">("right");
 
   useEffect(() => {
-    const allActions = Object.values(actions);
-    const idleAction =
-      actions["idle"] || actions["Idle"] ||
-      actions["Armature|idle"] || actions["Armature|Idle"] ||
-      actions["mixamo.com"] ||
-      allActions[0];
-
-    if (idleAction) {
-      idleAction.reset().fadeIn(0.3).play();
-      idleAction.setLoop(THREE.LoopRepeat, Infinity);
-    
-      // Disable animation influence on arm bones so useFrame can control them
-      const mixer = idleAction.getMixer();
-      const root = (idleAction as any)._localRoot || mixer.getRoot();
-    
-      const armBoneNames = ["LeftArm", "RightArm", "LeftForeArm", "RightForeArm", "LeftHand", "RightHand"];
-      
-      root.traverse((child: THREE.Object3D) => {
-        if (armBoneNames.includes(child.name)) {
-          // Zero out the bone's animation tracks by disabling binding
-          mixer.uncacheAction(idleAction.getClip(), child);
-        }
-      });
-    }
-    
     scene.traverse((child) => {
       const sm = child as THREE.SkinnedMesh;
       if (sm.isSkinnedMesh && sm.morphTargetDictionary) {
@@ -127,28 +102,7 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
       if (child.name === "RightArm") rightArmBone.current = child;
       if (child.name === "LeftForeArm") leftForeArmBone.current = child;
       if (child.name === "RightForeArm") rightForeArmBone.current = child;
-      setTimeout(() => {
-          if (leftArmBone.current) {
-            console.log("LeftArm rotation:", leftArmBone.current.rotation.x.toFixed(3), leftArmBone.current.rotation.y.toFixed(3), leftArmBone.current.rotation.z.toFixed(3));
-          }
-          if (rightArmBone.current) {
-            console.log("RightArm rotation:", rightArmBone.current.rotation.x.toFixed(3), rightArmBone.current.rotation.y.toFixed(3), rightArmBone.current.rotation.z.toFixed(3));
-          }
-          if (leftForeArmBone.current) {
-            console.log("LeftForeArm rotation:", leftForeArmBone.current.rotation.x.toFixed(3), leftForeArmBone.current.rotation.y.toFixed(3), leftForeArmBone.current.rotation.z.toFixed(3));
-          }
-          if (rightForeArmBone.current) {
-            console.log("RightForeArm rotation:", rightForeArmBone.current.rotation.x.toFixed(3), rightForeArmBone.current.rotation.y.toFixed(3), rightForeArmBone.current.rotation.z.toFixed(3));
-          }
-          if (headBone.current) {
-            console.log("Head rotation:", headBone.current.rotation.x.toFixed(3), headBone.current.rotation.y.toFixed(3), headBone.current.rotation.z.toFixed(3));
-          }
-        }, 1000);
     });
-
-    // DO NOT set any rotation here — let useFrame handle everything
-    // so it always overpowers the idle animation every frame
-
   }, [scene, actions]);
 
   useFrame((_, delta) => {
@@ -157,23 +111,23 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
     const speaking = signal.current.isSpeaking;
     const amp = speaking ? signal.current.amplitude : 0;
 
-    // ── Face tilt fix — keep group flat, no tilt ──
+    // ── Group — no tilt ──
     if (groupRef.current) {
       groupRef.current.rotation.x = THREE.MathUtils.lerp(
         groupRef.current.rotation.x, 0, 0.1
       );
     }
 
-    // ── Head — force facing forward, slight idle sway ──
+    // ── Head — keep facing forward with subtle idle sway ──
     if (headBone.current) {
       headBone.current.rotation.x = THREE.MathUtils.lerp(
         headBone.current.rotation.x,
-        0.05 + Math.sin(t * 0.35) * 0.02,  // near-zero keeps face forward
+        0.032 + Math.sin(t * 0.35) * 0.015,
         0.05
       );
       headBone.current.rotation.y = THREE.MathUtils.lerp(
         headBone.current.rotation.y,
-        Math.sin(t * 0.28) * 0.04,
+        Math.sin(t * 0.28) * 0.04 + Math.sin(t * 1.6) * 0.02 * amp,
         0.05
       );
       headBone.current.rotation.z = THREE.MathUtils.lerp(
@@ -183,10 +137,10 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
       );
     }
 
-    // ── Arm resting / gesture logic ──
+    // ── Gesture logic — only after 3s, only while speaking ──
     gestureTimer.current += delta;
 
-    if (gesturePhase.current === "idle" && gestureTimer.current >= nextGesture.current) {
+    if (gesturePhase.current === "idle" && gestureTimer.current >= nextGesture.current && t > 3) {
       if (speaking) {
         gesturePhase.current = "raising";
         gestureProgress.current = 0;
@@ -200,6 +154,7 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
       }
     }
 
+    // ── Gesture animation — raise, hold, lower ──
     if (gesturePhase.current !== "idle") {
       gestureProgress.current += delta;
       const duration = { raising: 0.6, holding: 0.9, lowering: 0.7 };
@@ -214,40 +169,40 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
 
       const p = Math.min(1, gestureProgress.current / (duration[phase] || 0.5));
       const eased = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p;
-      // Small raise — only bring arm slightly forward, not up
       const raiseAmount = 0.15 + Math.random() * 0.1;
 
       const side = gestureSide.current;
+
       if ((side === "right" || side === "both") && rightArmBone.current && rightForeArmBone.current) {
-        rightArmBone.current.rotation.x = THREE.MathUtils.lerp(rightArmBone.current.rotation.x, 0.3 + raiseAmount * eased, 0.1);
-        rightForeArmBone.current.rotation.x = THREE.MathUtils.lerp(rightForeArmBone.current.rotation.x, 0.4 + raiseAmount * eased, 0.1);
+        rightArmBone.current.rotation.x = THREE.MathUtils.lerp(rightArmBone.current.rotation.x, 0.1 + raiseAmount * eased, 0.1);
+        rightArmBone.current.rotation.z = THREE.MathUtils.lerp(rightArmBone.current.rotation.z, 1.55, 0.1);
+        rightForeArmBone.current.rotation.x = THREE.MathUtils.lerp(rightForeArmBone.current.rotation.x, 0.1 + raiseAmount * 1.5 * eased, 0.1);
+        rightForeArmBone.current.rotation.z = THREE.MathUtils.lerp(rightForeArmBone.current.rotation.z, 0.0, 0.1);
       }
       if ((side === "left" || side === "both") && leftArmBone.current && leftForeArmBone.current) {
-        leftArmBone.current.rotation.x = THREE.MathUtils.lerp(leftArmBone.current.rotation.x, 0.3 + raiseAmount * eased, 0.1);
-        leftForeArmBone.current.rotation.x = THREE.MathUtils.lerp(leftForeArmBone.current.rotation.x, 0.4 + raiseAmount * eased, 0.1);
+        leftArmBone.current.rotation.x = THREE.MathUtils.lerp(leftArmBone.current.rotation.x, 0.1 + raiseAmount * eased, 0.1);
+        leftArmBone.current.rotation.z = THREE.MathUtils.lerp(leftArmBone.current.rotation.z, -1.55, 0.1);
+        leftForeArmBone.current.rotation.x = THREE.MathUtils.lerp(leftForeArmBone.current.rotation.x, 0.1 + raiseAmount * 1.5 * eased, 0.1);
+        leftForeArmBone.current.rotation.z = THREE.MathUtils.lerp(leftForeArmBone.current.rotation.z, 0.0, 0.1);
       }
 
     } else {
-      // ── Resting — arms straight down, high lerp to fight idle animation ──
+      // ── Resting — enforce natural default positions ──
       if (leftArmBone.current) {
-        leftArmBone.current.rotation.x = THREE.MathUtils.lerp(leftArmBone.current.rotation.x, 0.1, 0.15);
-        leftArmBone.current.rotation.y = THREE.MathUtils.lerp(leftArmBone.current.rotation.y, 0.0, 0.15);
-        leftArmBone.current.rotation.z = THREE.MathUtils.lerp(leftArmBone.current.rotation.z, -1.55, 0.15); // straight down
+        leftArmBone.current.rotation.x = THREE.MathUtils.lerp(leftArmBone.current.rotation.x, 0.1, 0.1);
+        leftArmBone.current.rotation.z = THREE.MathUtils.lerp(leftArmBone.current.rotation.z, -1.55, 0.1);
       }
       if (rightArmBone.current) {
-        rightArmBone.current.rotation.x = THREE.MathUtils.lerp(rightArmBone.current.rotation.x, 0.1, 0.15);
-        rightArmBone.current.rotation.y = THREE.MathUtils.lerp(rightArmBone.current.rotation.y, 0.0, 0.15);
-        rightArmBone.current.rotation.z = THREE.MathUtils.lerp(rightArmBone.current.rotation.z, 1.55, 0.15); // straight down
+        rightArmBone.current.rotation.x = THREE.MathUtils.lerp(rightArmBone.current.rotation.x, 0.1, 0.1);
+        rightArmBone.current.rotation.z = THREE.MathUtils.lerp(rightArmBone.current.rotation.z, 1.55, 0.1);
       }
       if (leftForeArmBone.current) {
-        leftForeArmBone.current.rotation.x = THREE.MathUtils.lerp(leftForeArmBone.current.rotation.x, 0.1, 0.15);
-        leftForeArmBone.current.rotation.y = THREE.MathUtils.lerp(leftForeArmBone.current.rotation.y, 0.0, 0.15);
-        leftForeArmBone.current.rotation.z = THREE.MathUtils.lerp(leftForeArmBone.current.rotation.z, 0.0, 0.15);
+        leftForeArmBone.current.rotation.x = THREE.MathUtils.lerp(leftForeArmBone.current.rotation.x, 0.1, 0.1);
+        leftForeArmBone.current.rotation.z = THREE.MathUtils.lerp(leftForeArmBone.current.rotation.z, 0.0, 0.1);
       }
       if (rightForeArmBone.current) {
-        rightForeArmBone.current.rotation.x = THREE.MathUtils.lerp(rightForeArmBone.current.rotation.x, 0.1, 0.15);
-        rightForeArmBone.current.rotation.y = THREE.MathUtils.lerp(rightForeArmBone.current.rotation.y, 0.0, 0.15);
-        rightForeArmBone.current.rotation.z = THREE.MathUtils.lerp(rightForeArmBone.current.rotation.z, 0.0, 0.15);
+        rightForeArmBone.current.rotation.x = THREE.MathUtils.lerp(rightForeArmBone.current.rotation.x, 0.1, 0.1);
+        rightForeArmBone.current.rotation.z = THREE.MathUtils.lerp(rightForeArmBone.current.rotation.z, 0.0, 0.1);
       }
     }
 
