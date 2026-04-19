@@ -466,14 +466,15 @@ export default function InterviewRoomClient() {
           const currentUtter = (window as any).__currentUtterance;
           
           if (currentUtter) {
+            useOscillation = false;  // ← add this
             currentUtter.onboundary = (event: any) => {
               const char = event.utterance.text.charAt(event.charIndex);
               if (char) {
-                signal.current.viseme = charToViseme(char);
-                signal.current.amplitude = Math.random() * 0.5 + 0.5;
+                signalRefs.current[speakerIdx].current.viseme = charToViseme(char);
+                signalRefs.current[speakerIdx].current.amplitude = Math.random() * 0.5 + 0.5;
               }
             };
-          }
+         }
       }
       if (useOscillation) {
         // Oscillation-based: mouth opens/closes rhythmically for estimated duration
