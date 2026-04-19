@@ -198,7 +198,7 @@ function AvatarTile({
       {/* Camera config proven to show face/bust correctly */}
       <Canvas
         shadows
-        camera={{ position: [0, 0.15, 1.5], fov: 17 }}
+        camera={{ position: [0, 0.15, 1.7], fov: 15 }}
         gl={{ antialias: true, alpha: true }}
         style={{ height: "100%", width: "100%", background: "transparent" }}
       >
