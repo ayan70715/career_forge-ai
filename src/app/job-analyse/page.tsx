@@ -199,7 +199,7 @@ export default function JobAnalyserPage() {
       let salaryMin = 6, salaryMax = 24, totalJobs = 0, trendingSkills: string[] = [];
 
       try {
-        const adzunaRes = await fetch("/api/job-analyser/adzuna", {
+        const adzunaRes = await fetch("/api/job-analyse/adzuna", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ role: targetRole, city: targetCity }),
