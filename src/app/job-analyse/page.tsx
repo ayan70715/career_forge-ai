@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
+import {
+  extractTextFromSupportedResumeFile,
+  getSupportedResumeFileType,
+  MAX_RESUME_FILE_SIZE_BYTES,
+} from "@/lib/resume/textExtraction";
 
 // ─────────────────────────────────────────────────────
 // Types
@@ -127,7 +132,9 @@ export default function JobAnalyserPage() {
   const [loadingMsg, setLoadingMsg] = useState("");
   const [animated, setAnimated] = useState(false);
 
-  const LOADING_MSGS = [
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
     "Fetching live market data from Adzuna India...",
     "Scanning active job listings...",
     "Running Gemini AI analysis...",
@@ -135,6 +142,33 @@ export default function JobAnalyserPage() {
     "Calculating salary positioning...",
     "Generating your report...",
   ];
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    if (file.size > MAX_RESUME_FILE_SIZE_BYTES) {
+      setError(`File too large. Max ${Math.round(MAX_RESUME_FILE_SIZE_BYTES / (1024 * 1024))}MB.`);
+      return;
+    }
+    const supportedType = getSupportedResumeFileType(file);
+    if (!supportedType) {
+      setError("Unsupported file type. Please upload PDF, DOCX, or TXT.");
+      return;
+    }
+    setExtracting(true);
+    try {
+      const extracted = await extractTextFromSupportedResumeFile(file);
+      if (!extracted.text.trim()) { setError("Could not extract text. Try pasting manually."); return; }
+      setResume(extracted.text);
+      setResumeFileName(file.name);
+    } catch {
+      setError("Failed to read file. Try another file or paste manually.");
+    } finally {
+      setExtracting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const runAnalysis = async () => {
     // ── 1. Check user's Gemini API key ──
@@ -305,9 +339,8 @@ Rules:
             {/* Hero */}
             <div style={{ textAlign: "center", marginBottom: "48px" }}>
               <div style={{ display: "inline-block", fontSize: "11px", padding: "4px 14px", borderRadius: "20px", background: "rgba(99,210,255,0.08)", color: "#63d2ff", marginBottom: "16px", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", border: "1px solid rgba(99,210,255,0.2)" }}>POWERED BY ADZUNA + GEMINI</div>
-              <h1 style={{ fontSize: "clamp(28px, 5vw, 52px)", fontWeight: 800, lineHeight: 1.1, marginBottom: "16px" }}>
-                Know Exactly Where<br />
-                <span style={{ background: "linear-gradient(90deg, #63d2ff 0%, #3b82f6 50%, #a78bfa 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>You Stand in the Market</span>
+              <h1 style={{ fontSize: "36px", fontWeight: 800, lineHeight: 1.15, marginBottom: "16px" }}>
+                Know Exactly Where<br />You Stand in the Market
               </h1>
               <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "16px", maxWidth: "480px", margin: "0 auto" }}>
                 Real-time salary data · AI gap analysis · Interview prep — in 30 seconds.
@@ -340,8 +373,23 @@ Rules:
               {/* Resume + JD */}
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "16px", padding: "20px", flex: 1 }}>
-                  <div style={{ fontSize: "11px", color: "#63d2ff", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", marginBottom: "10px" }}>YOUR RESUME *</div>
-                  <textarea value={resume} onChange={(e) => setResume(e.target.value)} placeholder="Paste your resume text here — skills, experience, projects..." rows={7} style={{ width: "100%", padding: "12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.8)", outline: "none", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.6 }} />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                    <div style={{ fontSize: "11px", color: "#63d2ff", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em" }}>YOUR RESUME *</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      {resumeFileName && (
+                        <span style={{ fontSize: "10px", color: "#22d3a0", fontFamily: "'JetBrains Mono', monospace", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>✓ {resumeFileName}</span>
+                      )}
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={extracting}
+                        style={{ padding: "4px 10px", borderRadius: "8px", fontSize: "11px", cursor: extracting ? "not-allowed" : "pointer", background: "rgba(99,210,255,0.1)", border: "1px solid rgba(99,210,255,0.25)", color: "#63d2ff", fontFamily: "'Syne', sans-serif", opacity: extracting ? 0.6 : 1 }}
+                      >
+                        {extracting ? "Reading..." : "📎 Upload PDF/DOCX"}
+                      </button>
+                      <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt" onChange={handleFileUpload} style={{ display: "none" }} />
+                    </div>
+                  </div>
+                  <textarea value={resume} onChange={(e) => { setResume(e.target.value); setResumeFileName(null); }} placeholder="Paste your resume text here — or upload a PDF/DOCX above..." rows={7} style={{ width: "100%", padding: "12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.8)", outline: "none", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.6 }} />
                 </div>
                 <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "16px", padding: "20px" }}>
                   <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", marginBottom: "10px" }}>JOB DESCRIPTION (optional)</div>
