@@ -12,6 +12,32 @@ import type { InterviewerPersona } from "@/lib/interview/personaGenerator";
 import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
 
 // ─────────────────────────────────────────────────────
+// Puter.js fallback — used when Gemini quota is exceeded
+// puter is loaded via CDN script tag (window.puter), no npm install needed
+// ─────────────────────────────────────────────────────
+async function generateWithPuter(prompt: string): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const puter = (window as any).puter;
+  if (!puter?.ai?.chat) throw new Error("Puter not available");
+  const response = await puter.ai.chat(prompt, { model: "gpt-4o-mini" });
+  // puter.ai.chat returns either a string or {message:{content:string}}
+  if (typeof response === "string") return response;
+  return response?.message?.content ?? response?.content ?? String(response);
+}
+
+// Tries Gemini first; on quota/rate-limit errors falls back to puter.js
+async function generateWithFallback(prompt: string): Promise<string> {
+  try {
+    return await generateWithRetry(prompt);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Quota exceeded (429) or any Gemini error → try puter
+    console.warn("[AI] Gemini failed, trying puter.js fallback:", msg);
+    return await generateWithPuter(prompt);
+  }
+}
+
+// ─────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────
 type Message = { role: "user" | "assistant"; speakerIndex: number; content: string };
@@ -349,6 +375,17 @@ export default function InterviewRoomClient() {
     return () => clearInterval(id);
   }, []);
 
+  // ── Load puter.js CDN for AI fallback ──
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).puter) return; // already loaded
+    const script = document.createElement("script");
+    script.src = "https://js.puter.com/v2/";
+    script.async = true;
+    document.head.appendChild(script);
+  }, []);
+
   // ── Cleanup ──
   useEffect(() => {
     return () => {
@@ -432,7 +469,7 @@ export default function InterviewRoomClient() {
       phase += 0.38;
       const vowels: string[] = ["aa", "O", "E", "I", "U"];
       const openness = Math.abs(Math.sin(phase * Math.PI));
-      sig.current.amplitude = 0.08 + openness * 0.22; // natural speech range
+      sig.current.amplitude = 0.25 + openness * 0.7;
       if (openness > 0.45) {
         sig.current.viseme = vowels[Math.floor(phase * 0.5) % vowels.length];
       } else {
@@ -475,7 +512,7 @@ Keep it to 2-3 sentences. Be specific to the role and interview type. Do NOT say
 
 Respond with just the spoken text, nothing else.`;
 
-    generateWithRetry(prompt)
+    generateWithFallback(prompt)
       .then((openingText) => {
         speakAs(0, openingText);
         setMessages([{ role: "assistant", speakerIndex: 0, content: openingText }]);
@@ -570,7 +607,7 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
 }`;
 
     try {
-      let text = (await generateWithRetry(prompt)).trim();
+      let text = (await generateWithFallback(prompt)).trim();
       text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
       const data = JSON.parse(text) as { speakerIndex: number; response: string };
 
@@ -652,7 +689,7 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
       }}>
 
         {/* ══ LEFT: Avatars + user cam ══ */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "16px 16px 84px", gap: "12px", minWidth: 0, overflow: "hidden", height: "100%" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "16px 16px 80px", gap: "12px", minWidth: 0, overflow: "hidden" }}>
 
           {/* Top bar */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 2px" }}>
@@ -673,14 +710,25 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
             </div>
           </div>
 
-          {/* Avatar grid */}
+          {/* Avatar grid
+              1 interviewer  → 1 col stacked vertically, centered, wider  (interviewer on top, user below)
+              2 interviewers → 2 cols × 2 rows (3 tiles)
+              3 interviewers → 2 cols × 2 rows (4 tiles)
+          */}
           <div style={{
-            flex: 1, display: "grid", gap: "12px", minHeight: 0, overflow: "hidden",
-            gridTemplateColumns: "1fr 1fr",
-            gridTemplateRows: interviewerCount <= 1 ? "1fr" : "1fr 1fr",
-            maxWidth: interviewerCount <= 1 ? "660px" : "100%",
-            margin: interviewerCount <= 1 ? "0 auto" : undefined,
+            flex: 1,
+            display: "grid",
+            gap: "12px",
+            minHeight: 0,
+            overflow: "hidden",
+            // 1 interviewer: single column, constrained width, centered
+            // 2/3 interviewers: two columns, slightly inset so tiles aren't edge-to-edge
+            gridTemplateColumns: interviewerCount === 1 ? "1fr" : "1fr 1fr",
+            gridTemplateRows: "1fr 1fr",
+            maxWidth: interviewerCount === 1 ? "460px" : "92%",
             width: "100%",
+            margin: interviewerCount === 1 ? "0 auto" : "0",
+            alignSelf: "stretch",
           }}>
             {personas.slice(0, interviewerCount).map((p, i) => (
               <AvatarTile
