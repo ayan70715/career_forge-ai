@@ -102,8 +102,24 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
     if (idleAction) {
       idleAction.reset().fadeIn(0.3).play();
       idleAction.setLoop(THREE.LoopRepeat, Infinity);
+    
+      // Disable animation influence on arm bones so useFrame can control them
+      const mixer = idleAction.getMixer();
+      const root = (idleAction as any)._localRoot || mixer.getRoot();
+    
+      const armBoneNames = ["LeftArm", "RightArm", "LeftForeArm", "RightForeArm", "LeftHand", "RightHand"];
+      
+      root.traverse((child: THREE.Object3D) => {
+        if (armBoneNames.includes(child.name)) {
+          // Zero out the bone's animation tracks by disabling binding
+          mixer.uncacheAction(idleAction.getClip(), child);
+        }
+      });
     }
-
+    // DEBUG — paste console output to chat
+    console.log("All actions:", Object.keys(actions));
+    console.log("Playing action:", idleAction?.getClip().name);
+    console.log("Clip tracks:", idleAction?.getClip().tracks.map(t => t.name));
     scene.traverse((child) => {
       const sm = child as THREE.SkinnedMesh;
       if (sm.isSkinnedMesh && sm.morphTargetDictionary) {
