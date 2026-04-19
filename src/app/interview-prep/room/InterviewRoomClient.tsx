@@ -223,7 +223,7 @@ function AvatarTile({
       border: speaking ? "1.5px solid rgba(82,196,255,0.7)" : "1.5px solid rgba(255,255,255,0.07)",
       boxShadow: speaking ? "0 0 20px rgba(82,196,255,0.2)" : "0 4px 24px rgba(0,0,0,0.4)",
       transition: "border 0.3s ease, box-shadow 0.3s ease",
-      height: "100%", minHeight: "260px",
+      height: "100%",
     }}>
       {speaking && (
         <div style={{
@@ -432,7 +432,7 @@ export default function InterviewRoomClient() {
       phase += 0.38;
       const vowels: string[] = ["aa", "O", "E", "I", "U"];
       const openness = Math.abs(Math.sin(phase * Math.PI));
-      sig.current.amplitude = 0.25 + openness * 0.7;
+      sig.current.amplitude = 0.08 + openness * 0.22; // natural speech range
       if (openness > 0.45) {
         sig.current.viseme = vowels[Math.floor(phase * 0.5) % vowels.length];
       } else {
@@ -652,7 +652,7 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
       }}>
 
         {/* ══ LEFT: Avatars + user cam ══ */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "16px", gap: "12px", minWidth: 0 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "16px 16px 84px", gap: "12px", minWidth: 0, overflow: "hidden", height: "100%" }}>
 
           {/* Top bar */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 2px" }}>
@@ -675,9 +675,12 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
 
           {/* Avatar grid */}
           <div style={{
-            flex: 1, display: "grid", gap: "12px",
-            gridTemplateColumns: interviewerCount === 1 ? "1fr" : "1fr 1fr",
-            gridTemplateRows: interviewerCount <= 2 ? "1fr" : "1fr 1fr",
+            flex: 1, display: "grid", gap: "12px", minHeight: 0, overflow: "hidden",
+            gridTemplateColumns: "1fr 1fr",
+            gridTemplateRows: interviewerCount <= 1 ? "1fr" : "1fr 1fr",
+            maxWidth: interviewerCount <= 1 ? "660px" : "100%",
+            margin: interviewerCount <= 1 ? "0 auto" : undefined,
+            width: "100%",
           }}>
             {personas.slice(0, interviewerCount).map((p, i) => (
               <AvatarTile
@@ -696,7 +699,7 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
               background: "linear-gradient(145deg, #0e1520 0%, #131c2b 100%)",
               border: "1.5px solid rgba(255,255,255,0.07)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              minHeight: "200px",
+              
             }}>
               <video
                 ref={videoRef}
