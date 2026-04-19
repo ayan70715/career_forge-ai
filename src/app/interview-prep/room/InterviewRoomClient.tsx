@@ -459,32 +459,24 @@ export default function InterviewRoomClient() {
       // falling back to a smooth oscillation for the estimated duration.
       let useOscillation = true;
 
-      if ("speechSynthesis" in window) {
-        const utter = speechSynthesis.getUtterances?.();
-        // Hook into onboundary if browser supports it
-        const currentUtter = (window as any).__currentUtterance;
-        if (currentUtter) {
-          currentUtter.onboundary = (e: SpeechSynthesisEvent) => {
-            if (!lipSyncAlive.current) return;
-            const word = text.slice(e.charIndex, e.charIndex + (e.charLength || 4));
-            const ch = word[0] || "a";
-            const isVowel = /[aeiou]/i.test(ch);
-            signalRefs.current[speakerIdx].current.viseme = charToViseme(ch);
-            signalRefs.current[speakerIdx].current.amplitude = isVowel
-              ? 0.6 + Math.random() * 0.3
-              : 0.3 + Math.random() * 0.25;
-          };
-          currentUtter.onend = () => {
-            if (!lipSyncAlive.current) return;
-            signalRefs.current[speakerIdx].current.isSpeaking = false;
-            signalRefs.current[speakerIdx].current.amplitude = 0;
-            signalRefs.current[speakerIdx].current.viseme = "sil";
-            setIsSpeaking(false);
-            lipSyncAlive.current = false;
-          };
-          useOscillation = false;
-        }
+
+
+      // Around line 462...
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+  // Use 'any' type to access custom properties attached to window
+  const currentUtter = (window as any).__currentUtterance;
+  
+  if (currentUtter) {
+    currentUtter.onboundary = (event: any) => {
+      const char = event.utterance.text.charAt(event.charIndex);
+      if (char) {
+        signal.current.viseme = charToViseme(char);
+        signal.current.amplitude = Math.random() * 0.5 + 0.5;
       }
+    };
+  }
+}
+      
 
       if (useOscillation) {
         // Oscillation-based: mouth opens/closes rhythmically for estimated duration
