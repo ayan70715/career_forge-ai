@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, Suspense } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { useGLTF, useAnimations, Environment } from "@react-three/drei";
+import * as THREE from "three";
 import { useRouter } from "next/navigation";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
@@ -19,8 +22,178 @@ interface AvatarSignal {
 }
 
 // ─────────────────────────────────────────────────────
-// CSS Placeholder Avatar Tile (no Three.js / no GLB)
-// Swap this out for the real AvatarTile when model.glb is ready
+// Phoneme → viseme helper
+// ─────────────────────────────────────────────────────
+function charToViseme(ch: string): string {
+  if (/[aæ]/i.test(ch)) return "aa";
+  if (/[eɛ]/i.test(ch)) return "E";
+  if (/[iɪ]/i.test(ch)) return "I";
+  if (/[oɔ]/i.test(ch)) return "O";
+  if (/[uʊ]/i.test(ch)) return "U";
+  if (/[pb]/i.test(ch)) return "PP";
+  if (/[fv]/i.test(ch)) return "FF";
+  if (/[td]/i.test(ch)) return "DD";
+  if (/[kg]/i.test(ch)) return "kk";
+  if (/[sz]/i.test(ch)) return "SS";
+  if (/[nm]/i.test(ch)) return "nn";
+  if (/[r]/i.test(ch)) return "RR";
+  return "sil";
+}
+
+// Avaturn morph target name guesses (varies by export)
+const VISEME_MORPH_CANDIDATES: Record<string, string[]> = {
+  aa:  ["viseme_aa", "mouthOpen", "jawOpen", "Mouth_Open"],
+  E:   ["viseme_E",  "mouthSmile", "Mouth_Smile"],
+  I:   ["viseme_I",  "mouthSmileLeft", "mouthSmileRight"],
+  O:   ["viseme_O",  "mouthFunnel", "Mouth_O"],
+  U:   ["viseme_U",  "mouthPucker", "Mouth_U"],
+  PP:  ["viseme_PP", "mouthClose", "Mouth_Close"],
+  FF:  ["viseme_FF", "mouthLowerDownLeft"],
+  DD:  ["viseme_DD", "mouthUpperUpLeft"],
+  kk:  ["viseme_kk", "jawForward"],
+  SS:  ["viseme_SS", "mouthShrugUpper"],
+  nn:  ["viseme_nn", "mouthShrugLower"],
+  RR:  ["viseme_RR", "mouthRollLower"],
+  sil: ["viseme_sil"],
+};
+
+const BLINK_CANDIDATES = [
+  "eyeBlinkLeft", "eyeBlinkRight",
+  "EyeBlink_L", "EyeBlink_R",
+  "blink", "Blink",
+  "eye_close_L", "eye_close_R",
+];
+
+// ─────────────────────────────────────────────────────
+// 3D Avatar (bust/chest view, Avaturn GLB)
+// ─────────────────────────────────────────────────────
+function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
+  const { scene, animations } = useGLTF("/avatars/model.glb");
+  const groupRef = useRef<THREE.Group>(null);
+  const { actions } = useAnimations(animations, groupRef);
+
+  // Morph target meshes
+  const morphMeshes = useRef<THREE.SkinnedMesh[]>([]);
+  const headBone = useRef<THREE.Object3D | null>(null);
+
+  // Blink timers
+  const blinkTimer = useRef(0);
+  const blinkPhase = useRef<"idle" | "closing" | "opening">("idle");
+  const blinkProgress = useRef(0);
+  const nextBlink = useRef(2 + Math.random() * 3);
+
+  // Idle time
+  const idleT = useRef(Math.random() * 100);
+
+  useEffect(() => {
+    // Play first idle animation if available
+    const idleAction =
+      actions["idle"] ||
+      actions["Idle"] ||
+      actions["mixamo.com"] ||
+      Object.values(actions)[0];
+    if (idleAction) {
+      idleAction.reset().fadeIn(0.5).play();
+      idleAction.setLoop(THREE.LoopRepeat, Infinity);
+    }
+
+    // Collect meshes + bones
+    scene.traverse((child) => {
+      const sm = child as THREE.SkinnedMesh;
+      if (sm.isSkinnedMesh && sm.morphTargetDictionary) {
+        morphMeshes.current.push(sm);
+      }
+      if (!headBone.current &&
+          (child.name.toLowerCase().includes("head") ||
+           child.name.toLowerCase().includes("neck"))) {
+        headBone.current = child;
+      }
+    });
+  }, [scene, actions]);
+
+  useFrame((_, delta) => {
+    idleT.current += delta;
+    const t = idleT.current;
+
+    // ── Head idle movement ──────────────────────────
+    if (headBone.current) {
+      const spk = signal.current;
+      const amp = spk.isSpeaking ? spk.amplitude : 0;
+      headBone.current.rotation.x =
+        Math.sin(t * 0.35) * 0.03 + Math.sin(t * 2.2) * 0.015 * amp;
+      headBone.current.rotation.y =
+        Math.sin(t * 0.28) * 0.05 + Math.sin(t * 1.6) * 0.02 * amp;
+      headBone.current.rotation.z = Math.sin(t * 0.22) * 0.015;
+    }
+
+    // ── Blinking ────────────────────────────────────
+    blinkTimer.current += delta;
+    if (blinkPhase.current === "idle" && blinkTimer.current >= nextBlink.current) {
+      blinkPhase.current = "closing";
+      blinkProgress.current = 0;
+      blinkTimer.current = 0;
+    }
+
+    let blinkValue = 0;
+    if (blinkPhase.current !== "idle") {
+      blinkProgress.current += delta / 0.07; // 70ms per half
+      blinkValue = Math.min(1, blinkProgress.current);
+      if (blinkPhase.current === "opening") blinkValue = 1 - blinkValue;
+      if (blinkProgress.current >= 1) {
+        if (blinkPhase.current === "closing") {
+          blinkPhase.current = "opening";
+          blinkProgress.current = 0;
+        } else {
+          blinkPhase.current = "idle";
+          nextBlink.current = 2 + Math.random() * 3;
+          blinkValue = 0;
+        }
+      }
+    }
+
+    // ── Apply morph targets ─────────────────────────
+    morphMeshes.current.forEach((mesh) => {
+      const dict = mesh.morphTargetDictionary!;
+      const inf = mesh.morphTargetInfluences!;
+
+      // Blink
+      BLINK_CANDIDATES.forEach((name) => {
+        const idx = dict[name];
+        if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], blinkValue, 0.4);
+      });
+
+      // Lip sync
+      const { isSpeaking, amplitude, viseme } = signal.current;
+      const candidates = VISEME_MORPH_CANDIDATES[viseme] || VISEME_MORPH_CANDIDATES["aa"];
+
+      // Fade all mouth morphs toward 0
+      Object.values(VISEME_MORPH_CANDIDATES).flat().forEach((name) => {
+        const idx = dict[name];
+        if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], 0, 0.25);
+      });
+
+      // Drive active viseme
+      if (isSpeaking && amplitude > 0.05) {
+        candidates.forEach((name) => {
+          const idx = dict[name];
+          if (idx !== undefined) {
+            inf[idx] = THREE.MathUtils.lerp(inf[idx], amplitude, 0.45);
+          }
+        });
+      }
+    });
+  });
+
+  return (
+    // Position so only head + chest fills the frame
+    <group ref={groupRef} position={[0, -1.05, 0]} scale={1}>
+      <primitive object={scene} />
+    </group>
+  );
+}
+
+// ─────────────────────────────────────────────────────
+// Avatar tile card
 // ─────────────────────────────────────────────────────
 function AvatarTile({
   name,
@@ -33,35 +206,25 @@ function AvatarTile({
   signal: React.MutableRefObject<AvatarSignal>;
   speaking: boolean;
 }) {
-  // Drive a simple mouth-open CSS animation from the signal
-  const mouthRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let raf: number;
-    const tick = () => {
-      if (mouthRef.current) {
-        const h = speaking ? 2 + signal.current.amplitude * 10 : 2;
-        mouthRef.current.style.height = `${h}px`;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [speaking, signal]);
-
-  const initials = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-
   return (
-    <div style={{
-      position: "relative", borderRadius: "16px", overflow: "hidden",
-      background: "linear-gradient(145deg, #0e1520 0%, #131c2b 100%)",
-      border: speaking ? "1.5px solid rgba(82,196,255,0.7)" : "1.5px solid rgba(255,255,255,0.07)",
-      boxShadow: speaking ? "0 0 20px rgba(82,196,255,0.2)" : "0 4px 24px rgba(0,0,0,0.4)",
-      transition: "border 0.3s ease, box-shadow 0.3s ease",
-      height: "100%", minHeight: "260px",
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-    }}>
-      {/* Pulse ring */}
+    <div
+      style={{
+        position: "relative",
+        borderRadius: "16px",
+        overflow: "hidden",
+        background: "linear-gradient(145deg, #0e1520 0%, #131c2b 100%)",
+        border: speaking
+          ? "1.5px solid rgba(82,196,255,0.7)"
+          : "1.5px solid rgba(255,255,255,0.07)",
+        boxShadow: speaking
+          ? "0 0 20px rgba(82,196,255,0.2)"
+          : "0 4px 24px rgba(0,0,0,0.4)",
+        transition: "border 0.3s ease, box-shadow 0.3s ease",
+        height: "100%",
+        minHeight: "260px",
+      }}
+    >
+      {/* Pulse ring when speaking */}
       {speaking && (
         <div style={{
           position: "absolute", inset: 0, borderRadius: "16px",
@@ -71,79 +234,21 @@ function AvatarTile({
         }} />
       )}
 
-      {/* Avatar illustration */}
-      <div style={{
-        display: "flex", flexDirection: "column", alignItems: "center", gap: "0",
-        animation: speaking ? "headBob 1.8s ease-in-out infinite" : "idleFloat 4s ease-in-out infinite",
-      }}>
-        {/* Head */}
-        <div style={{
-          width: "80px", height: "88px", borderRadius: "50% 50% 45% 45%",
-          background: "linear-gradient(160deg, #c8a882 0%, #b8926a 100%)",
-          position: "relative", boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-        }}>
-          {/* Eyes */}
-          <div style={{ position: "absolute", top: "36px", left: "18px", display: "flex", gap: "20px" }}>
-            {[0, 1].map((i) => (
-              <div key={i} style={{
-                width: "10px", height: "10px", borderRadius: "50%",
-                background: "#2d1a0e",
-                animation: `blink ${3 + i * 0.7}s ease-in-out infinite`,
-                animationDelay: `${i * 0.15}s`,
-              }} />
-            ))}
-          </div>
-          {/* Mouth */}
-          <div ref={mouthRef} style={{
-            position: "absolute", bottom: "18px", left: "50%", transform: "translateX(-50%)",
-            width: "22px", height: "2px", borderRadius: "4px",
-            background: "#7a4a2a",
-            transition: "height 0.05s ease",
-          }} />
-          {/* Hair */}
-          <div style={{
-            position: "absolute", top: "-8px", left: "-4px", right: "-4px", height: "36px",
-            borderRadius: "50% 50% 0 0",
-            background: "linear-gradient(180deg, #2c1a0a 0%, #3d2510 100%)",
-          }} />
-          {/* Initials fallback badge */}
-          <div style={{
-            position: "absolute", top: "8px", right: "-8px",
-            width: "22px", height: "22px", borderRadius: "50%",
-            background: "rgba(82,196,255,0.15)",
-            border: "1px solid rgba(82,196,255,0.3)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "8px", fontWeight: 700, color: "#52c4ff",
-            fontFamily: "'JetBrains Mono', monospace",
-          }}>{initials}</div>
-        </div>
-
-        {/* Neck */}
-        <div style={{
-          width: "26px", height: "18px",
-          background: "linear-gradient(180deg, #b8926a 0%, #a07858 100%)",
-        }} />
-
-        {/* Shoulders / suit */}
-        <div style={{
-          width: "120px", height: "60px",
-          borderRadius: "0 0 8px 8px",
-          background: "linear-gradient(160deg, #1a2540 0%, #111827 100%)",
-          position: "relative", overflow: "hidden",
-        }}>
-          {/* Shirt / tie */}
-          <div style={{
-            position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)",
-            width: "28px", height: "60px",
-            background: "linear-gradient(180deg, #e8e8e8 0%, #d0d0d0 100%)",
-          }} />
-          <div style={{
-            position: "absolute", top: "8px", left: "50%", transform: "translateX(-50%)",
-            width: "8px", height: "36px", borderRadius: "2px 2px 4px 4px",
-            background: "linear-gradient(180deg, #c0392b 0%, #922b21 100%)",
-          }} />
-        </div>
-      </div>
+      {/* 3D Canvas — bust/chest framing */}
+      <Canvas
+        camera={{ position: [0, 0.08, 1.6], fov: 30 }}
+        gl={{ antialias: true, alpha: true }}
+        style={{ height: "100%", width: "100%", background: "transparent" }}
+      >
+        <ambientLight intensity={0.7} />
+        <directionalLight position={[1.5, 3, 2]} intensity={1.4} />
+        <directionalLight position={[-2, 1, -1]} intensity={0.3} color="#6ab4ff" />
+        <pointLight position={[0, 1.5, 1.5]} intensity={0.4} color="#52c4ff" />
+        <Environment preset="studio" />
+        <Suspense fallback={null}>
+          <Avatar signal={signal} />
+        </Suspense>
+      </Canvas>
 
       {/* Name badge */}
       <div style={{
@@ -158,14 +263,18 @@ function AvatarTile({
                 <div key={i} style={{
                   width: "3px", height: "100%", borderRadius: "2px",
                   background: "#52c4ff",
-                  animation: "bar 0.55s ease-in-out infinite",
+                  animation: `bar 0.55s ease-in-out infinite`,
                   animationDelay: `${i * 0.12}s`,
                 }} />
               ))}
             </div>
           )}
-          <span style={{ color: "#fff", fontSize: "13px", fontWeight: 600, letterSpacing: "0.02em" }}>{name}</span>
-          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "11px", marginLeft: "auto" }}>{title}</span>
+          <span style={{ color: "#fff", fontSize: "13px", fontWeight: 600, letterSpacing: "0.02em" }}>
+            {name}
+          </span>
+          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "11px", marginLeft: "auto" }}>
+            {title}
+          </span>
         </div>
       </div>
     </div>
@@ -275,7 +384,7 @@ export default function InterviewRoomClient() {
         const ch = chars[i++];
         const isSpace = ch === " " || ch === "," || ch === ".";
         const isVowel = /[aeiou]/i.test(ch);
-        signals.current[speakerIdx].viseme = "sil";
+        signals.current[speakerIdx].viseme = isSpace ? "sil" : charToViseme(ch);
         signals.current[speakerIdx].amplitude = isSpace ? 0 : isVowel
           ? 0.55 + Math.random() * 0.45
           : 0.25 + Math.random() * 0.3;
@@ -420,18 +529,6 @@ export default function InterviewRoomClient() {
         @keyframes speakRing {
           0%,100% { opacity:0.4; transform:scale(1); }
           50% { opacity:0.9; transform:scale(1.008); }
-        }
-        @keyframes blink {
-          0%,92%,100% { transform:scaleY(1); }
-          95% { transform:scaleY(0.08); }
-        }
-        @keyframes idleFloat {
-          0%,100% { transform:translateY(0px) rotate(0deg); }
-          50% { transform:translateY(-6px) rotate(0.5deg); }
-        }
-        @keyframes headBob {
-          0%,100% { transform:translateY(0px) rotate(-0.5deg); }
-          50% { transform:translateY(-3px) rotate(0.5deg); }
         }
         @keyframes bar {
           0%,100% { transform:scaleY(0.25); }
