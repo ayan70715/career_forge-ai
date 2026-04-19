@@ -238,7 +238,7 @@ function AvatarTile({
         shadows
         // Change position from [0, 0.15, 1.7] to [0, 0.4, 0.9] 
         // Lower FOV (15 -> 25) helps zoom in while maintaining focus on the face
-        camera={{ position: [0, 0.28, 0.65], fov: 19 }} 
+        camera={{ position: [0, 0.28, 0.69], fov: 21 }} 
         gl={{ antialias: true, alpha: true }}
         style={{ height: "100%", width: "100%", background: "transparent" }}
       >
