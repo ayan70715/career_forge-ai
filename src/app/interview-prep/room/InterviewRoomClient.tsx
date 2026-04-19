@@ -115,6 +115,11 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
       if (!rightArmBone.current && (n.includes("rightarm") || n.includes("right_arm") || n === "rightshoulder")) rightArmBone.current = child;
       if (!leftForeArmBone.current && (n.includes("leftforearm") || n.includes("left_forearm"))) leftForeArmBone.current = child;
       if (!rightForeArmBone.current && (n.includes("rightforearm") || n.includes("right_forearm"))) rightForeArmBone.current = child;
+
+      // DEBUG — remove after fixing
+      if (child.type === "Bone" || child.name) {
+        console.log("Bone:", child.name);
+      }
     });
 
     // Snap arms down immediately on load
