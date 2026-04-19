@@ -73,6 +73,10 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
 
   const morphMeshes = useRef<THREE.SkinnedMesh[]>([]);
   const headBone = useRef<THREE.Object3D | null>(null);
+  const leftArmBone = useRef<THREE.Object3D | null>(null);
+  const rightArmBone = useRef<THREE.Object3D | null>(null);
+  const leftForeArmBone = useRef<THREE.Object3D | null>(null);
+  const rightForeArmBone = useRef<THREE.Object3D | null>(null);
 
   const blinkTimer = useRef(0);
   const blinkPhase = useRef<"idle" | "closing" | "opening">("idle");
@@ -80,40 +84,156 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
   const nextBlink = useRef(2 + Math.random() * 3);
   const idleT = useRef(Math.random() * 100);
 
+  // Hand gesture state
+  const gestureTimer = useRef(0);
+  const nextGesture = useRef(4 + Math.random() * 6); // every 4–10s
+  const gesturePhase = useRef<"idle" | "raising" | "holding" | "lowering">("idle");
+  const gestureProgress = useRef(0);
+  const gestureSide = useRef<"left" | "right" | "both">("right");
+
   useEffect(() => {
+    // Try to play idle animation — stops T-pose
+    const allActions = Object.values(actions);
     const idleAction =
-      actions["idle"] ||
-      actions["Idle"] ||
+      actions["idle"] || actions["Idle"] ||
+      actions["Armature|idle"] || actions["Armature|Idle"] ||
       actions["mixamo.com"] ||
-      Object.values(actions)[0];
+      allActions[0];
+
     if (idleAction) {
-      idleAction.reset().fadeIn(0.5).play();
+      idleAction.reset().fadeIn(0.3).play();
       idleAction.setLoop(THREE.LoopRepeat, Infinity);
     }
 
+    // Collect bones and meshes
     scene.traverse((child) => {
       const sm = child as THREE.SkinnedMesh;
       if (sm.isSkinnedMesh && sm.morphTargetDictionary) {
         morphMeshes.current.push(sm);
       }
-      if (!headBone.current &&
-        (child.name.toLowerCase().includes("head") ||
-         child.name.toLowerCase().includes("neck"))) {
-        headBone.current = child;
-      }
+      const n = child.name.toLowerCase();
+      if (!headBone.current && (n.includes("head"))) headBone.current = child;
+      // Arm bones — Avaturn uses mixamo naming
+      if (!leftArmBone.current && (n.includes("leftarm") || n.includes("left_arm") || n === "leftshoulder")) leftArmBone.current = child;
+      if (!rightArmBone.current && (n.includes("rightarm") || n.includes("right_arm") || n === "rightshoulder")) rightArmBone.current = child;
+      if (!leftForeArmBone.current && (n.includes("leftforearm") || n.includes("left_forearm"))) leftForeArmBone.current = child;
+      if (!rightForeArmBone.current && (n.includes("rightforearm") || n.includes("right_forearm"))) rightForeArmBone.current = child;
     });
+
+    // FIX: Force arms down from T-pose by rotating upper arm bones
+    if (leftArmBone.current) {
+      leftArmBone.current.rotation.z = 1.2;   // bring left arm down
+      leftArmBone.current.rotation.x = 0.1;
+    }
+    if (rightArmBone.current) {
+      rightArmBone.current.rotation.z = -1.2; // bring right arm down
+      rightArmBone.current.rotation.x = 0.1;
+    }
+    if (leftForeArmBone.current) leftForeArmBone.current.rotation.z = 0.3;
+    if (rightForeArmBone.current) rightForeArmBone.current.rotation.z = -0.3;
+
   }, [scene, actions]);
 
   useFrame((_, delta) => {
     idleT.current += delta;
     const t = idleT.current;
+    const speaking = signal.current.isSpeaking;
+    const amp = speaking ? signal.current.amplitude : 0;
 
-    // ── Head idle movement ──
+    // ── FIX: Face tilt — group tilts back slightly, correct with rotation ──
+    if (groupRef.current) {
+      groupRef.current.rotation.x = THREE.MathUtils.lerp(
+        groupRef.current.rotation.x, 0, 0.05
+      );
+    }
+
+    // ── Head movement ──
     if (headBone.current) {
-      const amp = signal.current.isSpeaking ? signal.current.amplitude : 0;
-      headBone.current.rotation.x = Math.sin(t * 0.35) * 0.03 + Math.sin(t * 2.2) * 0.015 * amp;
-      headBone.current.rotation.y = Math.sin(t * 0.28) * 0.05 + Math.sin(t * 1.6) * 0.02 * amp;
-      headBone.current.rotation.z = Math.sin(t * 0.22) * 0.015;
+      headBone.current.rotation.x = THREE.MathUtils.lerp(
+        headBone.current.rotation.x,
+        Math.sin(t * 0.35) * 0.025 + Math.sin(t * 2.2) * 0.01 * amp,
+        0.05
+      );
+      headBone.current.rotation.y = THREE.MathUtils.lerp(
+        headBone.current.rotation.y,
+        Math.sin(t * 0.28) * 0.04 + Math.sin(t * 1.6) * 0.02 * amp,
+        0.05
+      );
+      headBone.current.rotation.z = THREE.MathUtils.lerp(
+        headBone.current.rotation.z,
+        Math.sin(t * 0.22) * 0.012,
+        0.05
+      );
+    }
+
+    // ── Hand gesture logic ──
+    gestureTimer.current += delta;
+
+    if (gesturePhase.current === "idle" && gestureTimer.current >= nextGesture.current) {
+      // Trigger a gesture only while speaking (more natural)
+      if (speaking) {
+        gesturePhase.current = "raising";
+        gestureProgress.current = 0;
+        gestureTimer.current = 0;
+        nextGesture.current = 4 + Math.random() * 6;
+        const r = Math.random();
+        gestureSide.current = r < 0.4 ? "right" : r < 0.7 ? "left" : "both";
+      } else {
+        gestureTimer.current = 0;
+      }
+    }
+
+    // Gesture animation — raise, hold, lower
+    if (gesturePhase.current !== "idle") {
+      gestureProgress.current += delta;
+      const duration = { raising: 0.5, holding: 0.8, lowering: 0.6 };
+      const phase = gesturePhase.current;
+
+      if (gestureProgress.current >= duration[phase]) {
+        gestureProgress.current = 0;
+        if (phase === "raising") gesturePhase.current = "holding";
+        else if (phase === "holding") gesturePhase.current = "lowering";
+        else gesturePhase.current = "idle";
+      }
+
+      const p = Math.min(1, gestureProgress.current / (duration[phase] || 0.5));
+      const eased = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p;
+
+      // Base resting positions
+      const baseArmZ = 1.2;
+      const baseForeZ = 0.3;
+      // Raised gesture target
+      const raiseAmount = 0.5 + Math.random() * 0.3;
+
+      let targetArmZ = baseArmZ;
+      let targetForeZ = baseForeZ;
+
+      if (phase === "raising") {
+        targetArmZ = baseArmZ - raiseAmount * eased;
+        targetForeZ = baseForeZ + raiseAmount * 0.4 * eased;
+      } else if (phase === "holding") {
+        targetArmZ = baseArmZ - raiseAmount;
+        targetForeZ = baseForeZ + raiseAmount * 0.4;
+      } else if (phase === "lowering") {
+        targetArmZ = (baseArmZ - raiseAmount) + raiseAmount * eased;
+        targetForeZ = (baseForeZ + raiseAmount * 0.4) - raiseAmount * 0.4 * eased;
+      }
+
+      const side = gestureSide.current;
+      if ((side === "right" || side === "both") && rightArmBone.current && rightForeArmBone.current) {
+        rightArmBone.current.rotation.z = THREE.MathUtils.lerp(rightArmBone.current.rotation.z, -targetArmZ, 0.12);
+        rightForeArmBone.current.rotation.z = THREE.MathUtils.lerp(rightForeArmBone.current.rotation.z, -targetForeZ, 0.12);
+      }
+      if ((side === "left" || side === "both") && leftArmBone.current && leftForeArmBone.current) {
+        leftArmBone.current.rotation.z = THREE.MathUtils.lerp(leftArmBone.current.rotation.z, targetArmZ, 0.12);
+        leftForeArmBone.current.rotation.z = THREE.MathUtils.lerp(leftForeArmBone.current.rotation.z, targetForeZ, 0.12);
+      }
+    } else {
+      // Return to natural resting position
+      if (rightArmBone.current) rightArmBone.current.rotation.z = THREE.MathUtils.lerp(rightArmBone.current.rotation.z, -1.2, 0.04);
+      if (leftArmBone.current) leftArmBone.current.rotation.z = THREE.MathUtils.lerp(leftArmBone.current.rotation.z, 1.2, 0.04);
+      if (rightForeArmBone.current) rightForeArmBone.current.rotation.z = THREE.MathUtils.lerp(rightForeArmBone.current.rotation.z, -0.3, 0.04);
+      if (leftForeArmBone.current) leftForeArmBone.current.rotation.z = THREE.MathUtils.lerp(leftForeArmBone.current.rotation.z, 0.3, 0.04);
     }
 
     // ── Blinking ──
@@ -123,21 +243,14 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
       blinkProgress.current = 0;
       blinkTimer.current = 0;
     }
-
     let blinkValue = 0;
     if (blinkPhase.current !== "idle") {
       blinkProgress.current += delta / 0.07;
       blinkValue = Math.min(1, blinkProgress.current);
       if (blinkPhase.current === "opening") blinkValue = 1 - blinkValue;
       if (blinkProgress.current >= 1) {
-        if (blinkPhase.current === "closing") {
-          blinkPhase.current = "opening";
-          blinkProgress.current = 0;
-        } else {
-          blinkPhase.current = "idle";
-          nextBlink.current = 2 + Math.random() * 3;
-          blinkValue = 0;
-        }
+        if (blinkPhase.current === "closing") { blinkPhase.current = "opening"; blinkProgress.current = 0; }
+        else { blinkPhase.current = "idle"; nextBlink.current = 2 + Math.random() * 3; blinkValue = 0; }
       }
     }
 
@@ -146,32 +259,30 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
       const dict = mesh.morphTargetDictionary!;
       const inf = mesh.morphTargetInfluences!;
 
-      // Blink
       BLINK_CANDIDATES.forEach((name) => {
         const idx = dict[name];
         if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], blinkValue, 0.4);
       });
 
-      // Fade all mouth morphs to 0 first
       Object.values(VISEME_MORPH_CANDIDATES).flat().forEach((name) => {
         const idx = dict[name];
-        if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], 0, 0.25);
+        if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], 0, 0.35);
       });
 
-      // Drive active viseme
       const { isSpeaking, amplitude, viseme } = signal.current;
       if (isSpeaking && amplitude > 0.05) {
         const candidates = VISEME_MORPH_CANDIDATES[viseme] || VISEME_MORPH_CANDIDATES["aa"];
         candidates.forEach((name) => {
           const idx = dict[name];
-          if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], amplitude, 0.45);
+          if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], amplitude, 0.55);
         });
       }
     });
   });
 
   return (
-    <group ref={groupRef} position={[0, -1.6, 0]} scale={1}>
+    // group rotation.x corrects upward face tilt from model's default pose
+    <group ref={groupRef} position={[0, -1.6, 0]} rotation={[0.05, 0, 0]} scale={1}>
       <primitive object={scene} />
     </group>
   );
@@ -324,6 +435,8 @@ export default function InterviewRoomClient() {
   }, [isCameraOn]);
 
   // ── Lip sync driver ──
+  // Uses duration-based approach: estimate speech duration from word count,
+  // drive mouth in sync with actual TTS, stop cleanly when speech ends.
   const startLipSync = useCallback((speakerIdx: number, text: string) => {
     lipSyncAlive.current = false;
     setTimeout(() => {
@@ -331,7 +444,6 @@ export default function InterviewRoomClient() {
       setActiveSpeaker(speakerIdx);
       setIsSpeaking(true);
 
-      // Reset all
       signalRefs.current.forEach((ref) => {
         ref.current.isSpeaking = false;
         ref.current.amplitude = 0;
@@ -339,29 +451,70 @@ export default function InterviewRoomClient() {
       });
       signalRefs.current[speakerIdx].current.isSpeaking = true;
 
-      const chars = text.split("");
-      let i = 0;
+      // Estimate speech duration: ~140 words/min for TTS = ~430ms per word
+      const words = text.trim().split(/\s+/);
+      const estimatedMs = words.length * 430;
 
-      const tick = () => {
-        if (!lipSyncAlive.current || i >= chars.length) {
-          signalRefs.current[speakerIdx].current.isSpeaking = false;
-          signalRefs.current[speakerIdx].current.amplitude = 0;
-          signalRefs.current[speakerIdx].current.viseme = "sil";
-          setIsSpeaking(false);
-          return;
+      // Animate mouth using SpeechSynthesis boundary events where available,
+      // falling back to a smooth oscillation for the estimated duration.
+      let useOscillation = true;
+
+      if ("speechSynthesis" in window) {
+        const utter = speechSynthesis.getUtterances?.();
+        // Hook into onboundary if browser supports it
+        const currentUtter = (window as any).__currentUtterance;
+        if (currentUtter) {
+          currentUtter.onboundary = (e: SpeechSynthesisEvent) => {
+            if (!lipSyncAlive.current) return;
+            const word = text.slice(e.charIndex, e.charIndex + (e.charLength || 4));
+            const ch = word[0] || "a";
+            const isVowel = /[aeiou]/i.test(ch);
+            signalRefs.current[speakerIdx].current.viseme = charToViseme(ch);
+            signalRefs.current[speakerIdx].current.amplitude = isVowel
+              ? 0.6 + Math.random() * 0.3
+              : 0.3 + Math.random() * 0.25;
+          };
+          currentUtter.onend = () => {
+            if (!lipSyncAlive.current) return;
+            signalRefs.current[speakerIdx].current.isSpeaking = false;
+            signalRefs.current[speakerIdx].current.amplitude = 0;
+            signalRefs.current[speakerIdx].current.viseme = "sil";
+            setIsSpeaking(false);
+            lipSyncAlive.current = false;
+          };
+          useOscillation = false;
         }
-        const ch = chars[i++];
-        const isSpace = ch === " " || ch === "," || ch === ".";
-        const isVowel = /[aeiou]/i.test(ch);
-        signalRefs.current[speakerIdx].current.viseme = isSpace ? "sil" : charToViseme(ch);
-        signalRefs.current[speakerIdx].current.amplitude = isSpace ? 0
-          : isVowel ? 0.55 + Math.random() * 0.45
-          : 0.25 + Math.random() * 0.3;
+      }
 
-        const delay = isSpace ? 90 : 50 + Math.random() * 35;
-        setTimeout(tick, delay);
-      };
-      tick();
+      if (useOscillation) {
+        // Oscillation-based: mouth opens/closes rhythmically for estimated duration
+        const startTime = Date.now();
+        let phase = 0;
+
+        const tick = () => {
+          if (!lipSyncAlive.current) return;
+
+          const elapsed = Date.now() - startTime;
+          if (elapsed >= estimatedMs) {
+            signalRefs.current[speakerIdx].current.isSpeaking = false;
+            signalRefs.current[speakerIdx].current.amplitude = 0;
+            signalRefs.current[speakerIdx].current.viseme = "sil";
+            setIsSpeaking(false);
+            return;
+          }
+
+          // Oscillate between vowels at ~3Hz (natural speech rhythm)
+          phase += 0.33; // ~3 cycles/second at ~100ms tick
+          const vowels = ["aa", "O", "E", "I", "U"];
+          const openness = Math.abs(Math.sin(phase * Math.PI));
+          signalRefs.current[speakerIdx].current.amplitude = 0.3 + openness * 0.6;
+          signalRefs.current[speakerIdx].current.viseme =
+            openness > 0.5 ? vowels[Math.floor(phase) % vowels.length] : "sil";
+
+          setTimeout(tick, 100);
+        };
+        tick();
+      }
     }, 10);
   }, []);
 
@@ -378,7 +531,10 @@ export default function InterviewRoomClient() {
     else if (config.type === "behavioral")
       q = `Let's start your behavioral interview. Tell me about a challenging situation you handled.`;
 
-    speak(q);
+    // Store utterance ref so startLipSync can hook onboundary/onend
+    const utter = new SpeechSynthesisUtterance(q);
+    (window as any).__currentUtterance = utter;
+    speechSynthesis.speak(utter);
     startLipSync(0, q);
     setMessages([{ role: "assistant", content: q }]);
     setTranscriptLines([`Interviewer: ${q}`]);
@@ -447,6 +603,9 @@ Your response:`;
     }
 
     speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(aiText);
+    (window as any).__currentUtterance = utter;
+    speechSynthesis.speak(utter);
     speak(aiText);
     startLipSync(nextSpeaker, aiText);
     setMessages([...updated, { role: "assistant", content: aiText }]);
