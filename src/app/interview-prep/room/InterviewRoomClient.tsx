@@ -2,24 +2,40 @@
 
 import { useEffect, useRef, useState, useCallback, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useGLTF, useAnimations, Environment } from "@react-three/drei";
+import { useGLTF, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { useRouter } from "next/navigation";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
-import { getDefaultPersonas } from "@/lib/interview/personaGenerator";
+import { generatePersonas, getDefaultPersonas } from "@/lib/interview/personaGenerator";
+import type { InterviewerPersona } from "@/lib/interview/personaGenerator";
 import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
 
 // ─────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────
-type Message = { role: "user" | "assistant"; content: string };
+type Message = { role: "user" | "assistant"; speakerIndex: number; content: string };
 
 interface AvatarSignal {
   isSpeaking: boolean;
   amplitude: number;
   viseme: string;
 }
+
+interface InterviewConfig {
+  role: string;
+  type: string;
+  interviewerCount: number;
+  duration: number;
+  resumeText: string | null;
+}
+
+// Model paths mapped by 0-based index
+const MODEL_PATHS = [
+  "/avatars/model1.glb",
+  "/avatars/model2.glb",
+  "/avatars/model3.glb",
+];
 
 // ─────────────────────────────────────────────────────
 // Phoneme → viseme helper
@@ -64,15 +80,19 @@ const BLINK_CANDIDATES = [
 ];
 
 // ─────────────────────────────────────────────────────
-// 3D Avatar
+// 3D Avatar — loads the model at the given path
 // ─────────────────────────────────────────────────────
-function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
-  const { scene, animations } = useGLTF("/avatars/model.glb");
+function Avatar({
+  signal,
+  modelPath,
+}: {
+  signal: React.MutableRefObject<AvatarSignal>;
+  modelPath: string;
+}) {
+  const { scene } = useGLTF(modelPath);
   const groupRef = useRef<THREE.Group>(null);
-
   const morphMeshes = useRef<THREE.SkinnedMesh[]>([]);
   const headBone = useRef<THREE.Object3D | null>(null);
-
   const blinkTimer = useRef(0);
   const blinkPhase = useRef<"idle" | "closing" | "opening">("idle");
   const blinkProgress = useRef(0);
@@ -80,6 +100,8 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
   const idleT = useRef(Math.random() * 100);
 
   useEffect(() => {
+    morphMeshes.current = [];
+    headBone.current = null;
     scene.traverse((child) => {
       const sm = child as THREE.SkinnedMesh;
       if (sm.isSkinnedMesh && sm.morphTargetDictionary) {
@@ -94,7 +116,6 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
     const t = idleT.current;
     const amp = signal.current.isSpeaking ? signal.current.amplitude : 0;
 
-    // ── Head subtle idle sway ──
     if (headBone.current) {
       headBone.current.rotation.x = THREE.MathUtils.lerp(
         headBone.current.rotation.x,
@@ -113,7 +134,6 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
       );
     }
 
-    // ── Blinking ──
     blinkTimer.current += delta;
     if (blinkPhase.current === "idle" && blinkTimer.current >= nextBlink.current) {
       blinkPhase.current = "closing";
@@ -126,12 +146,17 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
       blinkValue = Math.min(1, blinkProgress.current);
       if (blinkPhase.current === "opening") blinkValue = 1 - blinkValue;
       if (blinkProgress.current >= 1) {
-        if (blinkPhase.current === "closing") { blinkPhase.current = "opening"; blinkProgress.current = 0; }
-        else { blinkPhase.current = "idle"; nextBlink.current = 2 + Math.random() * 3; blinkValue = 0; }
+        if (blinkPhase.current === "closing") {
+          blinkPhase.current = "opening";
+          blinkProgress.current = 0;
+        } else {
+          blinkPhase.current = "idle";
+          nextBlink.current = 2 + Math.random() * 3;
+          blinkValue = 0;
+        }
       }
     }
 
-    // ── Morph targets ──
     morphMeshes.current.forEach((mesh) => {
       const dict = mesh.morphTargetDictionary!;
       const inf = mesh.morphTargetInfluences!;
@@ -163,20 +188,25 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
     </group>
   );
 }
+
 // ─────────────────────────────────────────────────────
-// Avatar tile card
+// Avatar tile — loads the correct model per index
 // ─────────────────────────────────────────────────────
 function AvatarTile({
   name,
   title,
   signal,
   speaking,
+  modelIndex,
 }: {
   name: string;
   title: string;
   signal: React.MutableRefObject<AvatarSignal>;
   speaking: boolean;
+  modelIndex: number;
 }) {
+  const modelPath = MODEL_PATHS[modelIndex] ?? MODEL_PATHS[0];
+
   return (
     <div style={{
       position: "relative", borderRadius: "16px", overflow: "hidden",
@@ -195,7 +225,6 @@ function AvatarTile({
         }} />
       )}
 
-      {/* Camera config proven to show face/bust correctly */}
       <Canvas
         shadows
         camera={{ position: [0, 0.15, 1.7], fov: 15 }}
@@ -208,7 +237,7 @@ function AvatarTile({
         <pointLight position={[0, 1.5, 1.5]} intensity={0.4} color="#52c4ff" />
         <Environment preset="studio" />
         <Suspense fallback={null}>
-          <Avatar signal={signal} />
+          <Avatar signal={signal} modelPath={modelPath} />
         </Suspense>
       </Canvas>
 
@@ -245,9 +274,16 @@ export default function InterviewRoomClient() {
   const { speak, stop } = useTextToSpeech();
   const { start, stop: stopSTT, transcript: liveText, finalTranscript } = useSpeechToText();
 
-  const [config, setConfig] = useState({
-    role: "", type: "technical", interviewerCount: 2, duration: 20,
+  const [config, setConfig] = useState<InterviewConfig>({
+    role: "", type: "technical", interviewerCount: 2, duration: 20, resumeText: null,
   });
+
+  // Personas start as defaults, get replaced by Gemini-generated ones after mount
+  const [personas, setPersonas] = useState<InterviewerPersona[]>(() =>
+    getDefaultPersonas(2)
+  );
+  const [personasReady, setPersonasReady] = useState(false);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [transcriptLines, setTranscriptLines] = useState<string[]>([]);
   const [textInput, setTextInput] = useState("");
@@ -257,28 +293,44 @@ export default function InterviewRoomClient() {
   const [activeSpeaker, setActiveSpeaker] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [isThinking, setIsThinking] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const lipSyncAlive = useRef(false);
+  const interviewStarted = useRef(false);
 
-  // ── FIX 1: Stable signal refs — real MutableRefObjects so Avatar's useFrame reads live values ──
   const signalRefs = useRef<React.MutableRefObject<AvatarSignal>[]>([
     { current: { isSpeaking: false, amplitude: 0, viseme: "sil" } },
     { current: { isSpeaking: false, amplitude: 0, viseme: "sil" } },
     { current: { isSpeaking: false, amplitude: 0, viseme: "sil" } },
   ]);
 
-  // ── Config ──
+  // ── Load config + generate Gemini personas ──
   useEffect(() => {
+    let stored: InterviewConfig = {
+      role: "", type: "technical", interviewerCount: 2, duration: 20, resumeText: null,
+    };
     try {
       const s = localStorage.getItem("interviewConfig");
-      if (s) setConfig(JSON.parse(s));
+      if (s) stored = JSON.parse(s);
     } catch {}
-  }, []);
+    setConfig(stored);
 
-  const personas = getDefaultPersonas(config.interviewerCount);
+    const count = Math.min(stored.interviewerCount || 2, 3);
+
+    // Generate role-aware personas from Gemini
+    generatePersonas(stored.role, stored.type, count)
+      .then((generated) => {
+        setPersonas(generated);
+        setPersonasReady(true);
+      })
+      .catch(() => {
+        setPersonas(getDefaultPersonas(count));
+        setPersonasReady(true);
+      });
+  }, []);
 
   // ── Timer ──
   useEffect(() => {
@@ -301,7 +353,7 @@ export default function InterviewRoomClient() {
     }
   }, [transcriptLines]);
 
-  // ── FIX 2: Camera — assign srcObject in effect after state update so videoRef is mounted ──
+  // ── Camera srcObject assignment ──
   useEffect(() => {
     if (isCameraOn && streamRef.current && videoRef.current) {
       videoRef.current.srcObject = streamRef.current;
@@ -310,8 +362,6 @@ export default function InterviewRoomClient() {
   }, [isCameraOn]);
 
   // ── Lip sync driver ──
-  // Uses duration-based approach: estimate speech duration from word count,
-  // drive mouth in sync with actual TTS, stop cleanly when speech ends.
   const startLipSync = useCallback((speakerIdx: number, text: string) => {
     lipSyncAlive.current = false;
     setTimeout(() => {
@@ -326,56 +376,49 @@ export default function InterviewRoomClient() {
       });
       signalRefs.current[speakerIdx].current.isSpeaking = true;
 
-      // Estimate speech duration: ~140 words/min for TTS = ~430ms per word
       const words = text.trim().split(/\s+/);
       const estimatedMs = words.length * 430;
 
-      // Animate mouth using SpeechSynthesis boundary events where available,
-      // falling back to a smooth oscillation for the estimated duration.
       let useOscillation = true;
-
-
-
-        if (typeof window !== "undefined" && "speechSynthesis" in window) {
-          // Use 'any' type to access custom properties attached to window
-          const currentUtter = (window as any).__currentUtterance;
-          
-          if (currentUtter) {
-            useOscillation = false;  // ← add this
-            currentUtter.onboundary = (event: any) => {
-              const char = event.utterance.text.charAt(event.charIndex);
-              if (char) {
-                signalRefs.current[speakerIdx].current.viseme = charToViseme(char);
-                signalRefs.current[speakerIdx].current.amplitude = Math.random() * 0.5 + 0.5;
-              }
-            };
-         }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        const currentUtter = (window as unknown as Record<string, unknown>).__currentUtterance as SpeechSynthesisUtterance | undefined;
+        if (currentUtter) {
+          useOscillation = false;
+          currentUtter.onboundary = (event: SpeechSynthesisEvent) => {
+            const char = event.utterance.text.charAt(event.charIndex);
+            if (char) {
+              signalRefs.current[speakerIdx].current.viseme = charToViseme(char);
+              signalRefs.current[speakerIdx].current.amplitude = Math.random() * 0.5 + 0.5;
+            }
+          };
+          currentUtter.onend = () => {
+            signalRefs.current[speakerIdx].current.isSpeaking = false;
+            signalRefs.current[speakerIdx].current.amplitude = 0;
+            signalRefs.current[speakerIdx].current.viseme = "sil";
+            setIsSpeaking(false);
+          };
+        }
       }
+
       if (useOscillation) {
-        // Oscillation-based: mouth opens/closes rhythmically for estimated duration
         const startTime = Date.now();
         let phase = 0;
-
         const tick = () => {
           if (!lipSyncAlive.current) return;
-
-          const elapsed = Date.now() - startTime;
-          if (elapsed >= estimatedMs) {
+          const elapsedMs = Date.now() - startTime;
+          if (elapsedMs >= estimatedMs) {
             signalRefs.current[speakerIdx].current.isSpeaking = false;
             signalRefs.current[speakerIdx].current.amplitude = 0;
             signalRefs.current[speakerIdx].current.viseme = "sil";
             setIsSpeaking(false);
             return;
           }
-
-          // Oscillate between vowels at ~3Hz (natural speech rhythm)
-          phase += 0.33; // ~3 cycles/second at ~100ms tick
+          phase += 0.33;
           const vowels = ["aa", "O", "E", "I", "U"];
           const openness = Math.abs(Math.sin(phase * Math.PI));
           signalRefs.current[speakerIdx].current.amplitude = 0.3 + openness * 0.6;
           signalRefs.current[speakerIdx].current.viseme =
             openness > 0.5 ? vowels[Math.floor(phase) % vowels.length] : "sil";
-
           setTimeout(tick, 100);
         };
         tick();
@@ -383,27 +426,49 @@ export default function InterviewRoomClient() {
     }, 10);
   }, []);
 
-  // ── First question ──
-  useEffect(() => {
-    if (!config.role && !config.type) return;
-    let q = "Tell me about yourself.";
-    if (config.type === "technical")
-      q = `Hi, let's begin your ${config.role || "technical"} interview. Can you briefly introduce yourself and your technical background?`;
-    else if (config.type === "hr")
-      q = `Hi, let's begin your HR round for ${config.role}. Tell me about yourself and your motivations.`;
-    else if (config.type === "system")
-      q = `Let's start your system design interview for ${config.role}. Can you walk me through a system you've built?`;
-    else if (config.type === "behavioral")
-      q = `Let's start your behavioral interview. Tell me about a challenging situation you handled.`;
-
-    // Store utterance ref so startLipSync can hook onboundary/onend
-    const utter = new SpeechSynthesisUtterance(q);
-    (window as any).__currentUtterance = utter;
+  // ── Speak helper — speaks text as persona[speakerIdx] ──
+  const speakAs = useCallback((speakerIdx: number, text: string) => {
+    speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    (window as unknown as Record<string, unknown>).__currentUtterance = utter;
     speechSynthesis.speak(utter);
-    startLipSync(0, q);
-    setMessages([{ role: "assistant", content: q }]);
-    setTranscriptLines([`Interviewer: ${q}`]);
-  }, [config.role, config.type]);
+    speak(text);
+    startLipSync(speakerIdx, text);
+  }, [speak, startLipSync]);
+
+  // ── Generate opening question from Gemini once personas are ready ──
+  useEffect(() => {
+    if (!personasReady || interviewStarted.current) return;
+    interviewStarted.current = true;
+
+    const firstPersona = personas[0];
+    const resumeContext = config.resumeText
+      ? `\n\nCandidate's resume for context:\n${config.resumeText.slice(0, 1500)}`
+      : "";
+
+    const prompt = `You are ${firstPersona.name}, a ${firstPersona.role}.
+Your interviewing style: ${firstPersona.style}
+You are opening a ${config.type} interview for the role of "${config.role || "Software Engineer"}".${resumeContext}
+
+Generate a natural, professional opening statement and first question appropriate for your role and style.
+Keep it to 2-3 sentences. Be specific to the role and interview type. Do NOT say "certainly" or "sure".
+
+Respond with just the spoken text, nothing else.`;
+
+    generateWithRetry(prompt)
+      .then((openingText) => {
+        speakAs(0, openingText);
+        setMessages([{ role: "assistant", speakerIndex: 0, content: openingText }]);
+        setTranscriptLines([`${firstPersona.name}: ${openingText}`]);
+      })
+      .catch(() => {
+        // Fallback opening if Gemini fails
+        const fallback = `Hi, welcome to your ${config.type} interview for the ${config.role || "Software Engineer"} role. Let's start — can you briefly introduce yourself?`;
+        speakAs(0, fallback);
+        setMessages([{ role: "assistant", speakerIndex: 0, content: fallback }]);
+        setTranscriptLines([`${firstPersona.name}: ${fallback}`]);
+      });
+  }, [personasReady, personas, config, speakAs]);
 
   // ── Camera toggle ──
   const toggleCamera = useCallback(async () => {
@@ -411,7 +476,7 @@ export default function InterviewRoomClient() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         streamRef.current = stream;
-        setIsCameraOn(true); // srcObject assigned by useEffect above after render
+        setIsCameraOn(true);
       } catch {
         setError("Camera access denied");
       }
@@ -423,59 +488,86 @@ export default function InterviewRoomClient() {
     }
   }, [isCameraOn]);
 
-  // ── FIX 3: AI via user's Gemini key — no server route, no Puter fallback ──
+  // ── Handle candidate message — Gemini decides next speaker + generates response ──
   const handleUserMessage = useCallback(async (userText: string) => {
     if (!userText.trim()) return;
     setError(null);
+    setIsThinking(true);
 
     const apiKey = getApiKey();
     if (!apiKey) {
       setError("Please configure your Gemini API key in Settings first.");
+      setIsThinking(false);
       return;
     }
 
-    const updated: Message[] = [...messages, { role: "user", content: userText }];
-    setMessages(updated);
+    const updatedMessages: Message[] = [...messages, { role: "user", speakerIndex: -1, content: userText }];
+    setMessages(updatedMessages);
     setTranscriptLines((t) => [...t, `You: ${userText}`]);
 
-    const nextSpeaker = (activeSpeaker + 1) % Math.min(personas.length, 3);
-    const persona = personas[nextSpeaker];
+    const interviewerCount = Math.min(personas.length, 3);
+    const resumeContext = config.resumeText
+      ? `\nCandidate resume context: ${config.resumeText.slice(0, 800)}`
+      : "";
 
-    const history = updated.slice(-6)
-      .map((m) => `${m.role === "user" ? "Candidate" : "Interviewer"}: ${m.content}`)
+    const personaDescriptions = personas.slice(0, interviewerCount).map((p, i) =>
+      `Interviewer ${i} — ${p.name} (${p.role}): ${p.style}`
+    ).join("\n");
+
+    const history = updatedMessages.slice(-8)
+      .map((m) => {
+        if (m.role === "user") return `Candidate: ${m.content}`;
+        const p = personas[m.speakerIndex];
+        return `${p?.name ?? "Interviewer"} (${p?.role ?? ""}): ${m.content}`;
+      })
       .join("\n");
 
-    const prompt = `You are ${persona.name}, a ${persona.role || "professional interviewer"} conducting a ${config.type} interview.
-Role being interviewed for: ${config.role || "Software Engineer"}
+    const prompt = `You are coordinating a ${config.type} interview panel for the role of "${config.role || "Software Engineer"}".${resumeContext}
+
+The interview panel consists of:
+${personaDescriptions}
+
 Conversation so far:
 ${history}
 
+Based on the candidate's last response and the interview flow, decide:
+1. Which interviewer should speak next (choose the one whose expertise is most relevant to follow up)
+2. What that interviewer should say — one follow-up question or comment in their specific style
+
 Rules:
-- Ask ONE follow-up question only
+- Pick the interviewer whose ROLE is most relevant to the candidate's answer
+- If the candidate mentioned technical details → prefer the technical interviewer
+- If the candidate mentioned teamwork/culture → prefer the HR interviewer  
+- If the candidate mentioned product/strategy → prefer the product/engineering manager
+- Ask ONE focused question, 2-3 sentences max
 - Do NOT repeat previous questions
-- If the candidate asks you something, answer briefly then ask your question
-- Be professional and realistic
-- Keep response concise (2-3 sentences max)
+- Stay in character as the chosen interviewer
 
-Your response:`;
+Respond ONLY in this JSON format (no markdown, no code blocks):
+{
+  "speakerIndex": <0, 1, or 2>,
+  "response": "The interviewer's spoken response here"
+}`;
 
-    let aiText = "";
     try {
-      aiText = await generateWithRetry(prompt);
-    } catch (err: any) {
-      setError(`AI error: ${err.message}`);
-      return;
-    }
+      let text = (await generateWithRetry(prompt)).trim();
+      text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+      const data = JSON.parse(text) as { speakerIndex: number; response: string };
 
-    speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(aiText);
-    (window as any).__currentUtterance = utter;
-    speechSynthesis.speak(utter);
-    speak(aiText);
-    startLipSync(nextSpeaker, aiText);
-    setMessages([...updated, { role: "assistant", content: aiText }]);
-    setTranscriptLines((t) => [...t, `Interviewer: ${aiText}`]);
-  }, [messages, activeSpeaker, config, personas, speak, startLipSync]);
+      const nextIdx = Math.max(0, Math.min(data.speakerIndex, interviewerCount - 1));
+      const aiText = data.response || "Could you elaborate on that?";
+      const speaker = personas[nextIdx];
+
+      setIsThinking(false);
+      speakAs(nextIdx, aiText);
+      setMessages([...updatedMessages, { role: "assistant", speakerIndex: nextIdx, content: aiText }]);
+      setTranscriptLines((t) => [...t, `${speaker.name}: ${aiText}`]);
+    } catch (err: unknown) {
+      setIsThinking(false);
+      const message = err instanceof Error ? err.message : "AI error";
+      setError(message);
+    }
+  }, [messages, config, personas, speakAs]);
 
   const handleMic = useCallback(() => {
     if (!isRecording) {
@@ -527,6 +619,10 @@ Your response:`;
           from { opacity:0; transform:translateY(5px); }
           to   { opacity:1; transform:translateY(0); }
         }
+        @keyframes thinkPulse {
+          0%,100% { opacity:0.3; }
+          50% { opacity:1; }
+        }
       `}</style>
 
       <div style={{
@@ -543,6 +639,11 @@ Your response:`;
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#52c4ff", boxShadow: "0 0 8px #52c4ff" }} />
               <span className="mono" style={{ color: "rgba(255,255,255,0.45)", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase" }}>Live Interview</span>
+              {isThinking && (
+                <span className="mono" style={{ fontSize: "10px", color: "#52c4ff", animation: "thinkPulse 1s ease infinite" }}>
+                  ··· thinking
+                </span>
+              )}
             </div>
             <div className="mono" style={{ display: "flex", gap: "20px", fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>
               <span>{config.role || "Software Engineer"} · {config.type}</span>
@@ -562,13 +663,14 @@ Your response:`;
               <AvatarTile
                 key={p.id}
                 name={p.name}
-                title={p.role || "Interviewer"}
+                title={p.role}
                 signal={signalRefs.current[i]}
                 speaking={isSpeaking && activeSpeaker === i}
+                modelIndex={i}
               />
             ))}
 
-            {/* User tile — video always rendered so ref is available */}
+            {/* User tile */}
             <div style={{
               position: "relative", borderRadius: "16px", overflow: "hidden",
               background: "linear-gradient(145deg, #0e1520 0%, #131c2b 100%)",
@@ -643,7 +745,8 @@ Your response:`;
 
           <div ref={transcriptRef} style={{ flex: 1, overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
             {transcriptLines.map((line, i) => {
-              const isAI = line.startsWith("Interviewer:");
+              const isAI = !line.startsWith("You:");
+              const speakerName = isAI ? line.split(":")[0] : "You";
               return (
                 <div key={i} style={{
                   padding: "10px 12px", borderRadius: "10px", fontSize: "12px", lineHeight: "1.55",
@@ -653,25 +756,43 @@ Your response:`;
                   animation: "fadeUp 0.25s ease",
                 }}>
                   <div className="mono" style={{ fontSize: "9px", fontWeight: 500, letterSpacing: "0.1em", color: isAI ? "#52c4ff" : "rgba(255,255,255,0.28)", marginBottom: "4px", textTransform: "uppercase" }}>
-                    {isAI ? "Interviewer" : "You"}
+                    {speakerName}
                   </div>
-                  {line.replace(/^(Interviewer|You): /, "")}
+                  {line.replace(/^[^:]+: /, "")}
                 </div>
               );
             })}
+            {isThinking && (
+              <div style={{
+                padding: "10px 12px", borderRadius: "10px", fontSize: "12px",
+                background: "rgba(82,196,255,0.04)",
+                borderLeft: "2px solid rgba(82,196,255,0.2)",
+                animation: "thinkPulse 1s ease infinite",
+              }}>
+                <div className="mono" style={{ fontSize: "9px", color: "#52c4ff", marginBottom: "4px" }}>INTERVIEWER</div>
+                <span style={{ color: "rgba(255,255,255,0.3)" }}>···</span>
+              </div>
+            )}
           </div>
 
           <div style={{ padding: "12px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: "8px" }}>
             <input
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && textInput.trim()) { handleUserMessage(textInput); setTextInput(""); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && textInput.trim() && !isThinking) {
+                  handleUserMessage(textInput);
+                  setTextInput("");
+                }
+              }}
               placeholder="Type a response..."
-              style={{ flex: 1, padding: "9px 12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.85)", outline: "none", fontFamily: "'Syne', sans-serif" }}
+              disabled={isThinking}
+              style={{ flex: 1, padding: "9px 12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.85)", outline: "none", fontFamily: "'Syne', sans-serif", opacity: isThinking ? 0.5 : 1 }}
             />
             <button
-              onClick={() => { if (textInput.trim()) { handleUserMessage(textInput); setTextInput(""); } }}
-              style={{ padding: "9px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: 600, background: "rgba(82,196,255,0.12)", color: "#52c4ff", border: "1px solid rgba(82,196,255,0.25)", cursor: "pointer", fontFamily: "'Syne', sans-serif" }}
+              onClick={() => { if (textInput.trim() && !isThinking) { handleUserMessage(textInput); setTextInput(""); } }}
+              disabled={isThinking}
+              style={{ padding: "9px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: 600, background: "rgba(82,196,255,0.12)", color: "#52c4ff", border: "1px solid rgba(82,196,255,0.25)", cursor: isThinking ? "not-allowed" : "pointer", fontFamily: "'Syne', sans-serif", opacity: isThinking ? 0.5 : 1 }}
             >Send</button>
           </div>
         </div>
@@ -685,13 +806,14 @@ Your response:`;
           border: "1px solid rgba(255,255,255,0.07)",
           boxShadow: "0 8px 48px rgba(0,0,0,0.65)",
         }}>
-          <button onClick={handleMic} title={isRecording ? "Stop" : "Speak"} style={{
+          <button onClick={handleMic} title={isRecording ? "Stop" : "Speak"} disabled={isThinking} style={{
             width: "50px", height: "50px", borderRadius: "50%", fontSize: "18px",
             display: "flex", alignItems: "center", justifyContent: "center",
             background: isRecording ? "rgba(239,68,68,0.18)" : "rgba(255,255,255,0.06)",
             border: `1.5px solid ${isRecording ? "rgba(239,68,68,0.55)" : "rgba(255,255,255,0.1)"}`,
-            cursor: "pointer", transition: "all 0.2s",
+            cursor: isThinking ? "not-allowed" : "pointer", transition: "all 0.2s",
             animation: isRecording ? "recPulse 1s ease infinite" : "none",
+            opacity: isThinking ? 0.5 : 1,
           }}>🎤</button>
 
           <button onClick={toggleCamera} title={isCameraOn ? "Camera off" : "Camera on"} style={{
