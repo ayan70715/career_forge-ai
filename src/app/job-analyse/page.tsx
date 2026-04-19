@@ -135,13 +135,7 @@ export default function JobAnalyserPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [resumeFileName, setResumeFileName] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
-    "Fetching live market data from Adzuna India...",
-    "Scanning active job listings...",
-    "Running Gemini AI analysis...",
-    "Mapping your skills to market demand...",
-    "Calculating salary positioning...",
-    "Generating your report...",
-  ];
+  
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -171,6 +165,14 @@ export default function JobAnalyserPage() {
   };
 
   const runAnalysis = async () => {
+    const LOADING_MSGS = [
+      "Fetching live market data from Adzuna India...",
+      "Scanning active job listings...",
+      "Running Gemini AI analysis...",
+      "Mapping your skills to market demand...",
+      "Calculating salary positioning...",
+      "Generating your report...",
+    ];
     // ── 1. Check user's Gemini API key ──
     const apiKey = getApiKey();
     if (!apiKey) {
