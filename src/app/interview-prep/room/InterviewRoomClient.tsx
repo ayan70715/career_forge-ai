@@ -166,17 +166,26 @@ function Avatar({
         if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], blinkValue, 0.4);
       });
 
+      const { isSpeaking, amplitude, viseme } = signal.current;
+      const activeVisemeMorphs = new Set(
+        (VISEME_MORPH_CANDIDATES[viseme] ?? VISEME_MORPH_CANDIDATES["aa"])
+      );
+
+      // Decay all viseme morphs toward 0 — but skip the currently active ones
+      // so the decay lerp doesn't fight the drive lerp on the same frame
       Object.values(VISEME_MORPH_CANDIDATES).flat().forEach((name) => {
+        if (isSpeaking && activeVisemeMorphs.has(name)) return; // driven below
         const idx = dict[name];
-        if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], 0, 0.35);
+        if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], 0, 0.25);
       });
 
-      const { isSpeaking, amplitude, viseme } = signal.current;
-      if (isSpeaking && amplitude > 0.05) {
-        const candidates = VISEME_MORPH_CANDIDATES[viseme] || VISEME_MORPH_CANDIDATES["aa"];
-        candidates.forEach((name) => {
+      // Drive the active viseme morph targets toward the current amplitude
+      if (isSpeaking && amplitude > 0.02) {
+        activeVisemeMorphs.forEach((name) => {
           const idx = dict[name];
-          if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], amplitude, 0.55);
+          if (idx !== undefined) {
+            inf[idx] = THREE.MathUtils.lerp(inf[idx], amplitude, 0.45);
+          }
         });
       }
     });
@@ -271,7 +280,7 @@ function AvatarTile({
 // ─────────────────────────────────────────────────────
 export default function InterviewRoomClient() {
   const router = useRouter();
-  const { speak, stop } = useTextToSpeech();
+  const { stop } = useTextToSpeech();
   const { start, stop: stopSTT, transcript: liveText, finalTranscript } = useSpeechToText();
 
   const [config, setConfig] = useState<InterviewConfig>({
@@ -362,85 +371,88 @@ export default function InterviewRoomClient() {
   }, [isCameraOn]);
 
   // ── Lip sync driver ──
+  // Strategy: ALWAYS run the oscillation loop for smooth continuous mouth movement.
+  // Use onboundary ONLY to update the viseme shape — not as the sole animation driver,
+  // since boundary events are sparse (word-level) and unreliable in Chrome.
   const startLipSync = useCallback((speakerIdx: number, text: string) => {
-    // Kill any previous lip-sync loop immediately
+    // Kill any previous oscillation loop
     lipSyncAlive.current = false;
 
-    // Silence ALL avatars first
+    // Silence ALL avatars before activating the new speaker
     signalRefs.current.forEach((ref) => {
       ref.current.isSpeaking = false;
       ref.current.amplitude = 0;
       ref.current.viseme = "sil";
     });
 
-    // Activate only the current speaker
     setActiveSpeaker(speakerIdx);
     setIsSpeaking(true);
     signalRefs.current[speakerIdx].current.isSpeaking = true;
+    signalRefs.current[speakerIdx].current.viseme = "aa";
 
-    const stopSpeaker = () => {
-      signalRefs.current[speakerIdx].current.isSpeaking = false;
-      signalRefs.current[speakerIdx].current.amplitude = 0;
-      signalRefs.current[speakerIdx].current.viseme = "sil";
-      setIsSpeaking(false);
-    };
+    const sig = signalRefs.current[speakerIdx];
+    let speechEndedVia = false;
 
-    // Prefer SpeechSynthesis boundary events for accurate visemes
-    const currentUtter = (window as unknown as Record<string, unknown>).__currentUtterance as SpeechSynthesisUtterance | undefined;
-    if (typeof window !== "undefined" && "speechSynthesis" in window && currentUtter) {
+    // Attach boundary handler to update viseme shape from real speech
+    const currentUtter = (window as unknown as Record<string, unknown>)
+      .__currentUtterance as SpeechSynthesisUtterance | undefined;
+
+    if (currentUtter) {
       currentUtter.onboundary = (event: SpeechSynthesisEvent) => {
-        // Only animate if this speaker is still the active one
-        if (signalRefs.current[speakerIdx].current.isSpeaking) {
-          const char = event.utterance.text.charAt(event.charIndex);
-          if (char) {
-            signalRefs.current[speakerIdx].current.viseme = charToViseme(char);
-            signalRefs.current[speakerIdx].current.amplitude = 0.5 + Math.random() * 0.45;
-          }
-        }
+        if (!sig.current.isSpeaking) return;
+        const char = event.utterance.text.charAt(event.charIndex);
+        if (char) sig.current.viseme = charToViseme(char);
       };
-      currentUtter.onend = () => stopSpeaker();
-      currentUtter.onerror = () => stopSpeaker();
-      // No oscillation needed — boundary events handle it
-      return;
+      currentUtter.onend = () => { speechEndedVia = true; };
+      currentUtter.onerror = () => { speechEndedVia = true; };
     }
 
-    // ── Fallback: oscillation-based lip sync (no SpeechSynthesis boundary support) ──
+    // Oscillation loop — always runs to keep mouth moving smoothly between boundaries
     lipSyncAlive.current = true;
     const words = text.trim().split(/\s+/);
-    const estimatedMs = words.length * 430;
+    const estimatedMs = Math.max(words.length * 420, 800);
     const startTime = Date.now();
     let phase = 0;
+
     const tick = () => {
       if (!lipSyncAlive.current) return;
-      // Stop if another speaker took over
-      if (!signalRefs.current[speakerIdx].current.isSpeaking) return;
+      if (!sig.current.isSpeaking) return;
+
       const elapsedMs = Date.now() - startTime;
-      if (elapsedMs >= estimatedMs) {
-        stopSpeaker();
+      if (speechEndedVia || elapsedMs >= estimatedMs) {
+        sig.current.isSpeaking = false;
+        sig.current.amplitude = 0;
+        sig.current.viseme = "sil";
+        setIsSpeaking(false);
         return;
       }
-      phase += 0.33;
-      const vowels = ["aa", "O", "E", "I", "U"];
+
+      phase += 0.38;
+      const vowels: string[] = ["aa", "O", "E", "I", "U"];
       const openness = Math.abs(Math.sin(phase * Math.PI));
-      signalRefs.current[speakerIdx].current.amplitude = 0.3 + openness * 0.6;
-      signalRefs.current[speakerIdx].current.viseme =
-        openness > 0.5 ? vowels[Math.floor(phase) % vowels.length] : "sil";
-      setTimeout(tick, 100);
+      sig.current.amplitude = 0.25 + openness * 0.7;
+      if (openness > 0.45) {
+        sig.current.viseme = vowels[Math.floor(phase * 0.5) % vowels.length];
+      } else {
+        sig.current.viseme = "sil";
+      }
+      setTimeout(tick, 80);
     };
     tick();
   }, []);
 
   // ── Speak helper — speaks text as persona[speakerIdx] ──
+  // Only uses speechSynthesis directly — the useTextToSpeech speak() call was removed
+  // because it queued a second competing utterance that broke boundary events.
   const speakAs = useCallback((speakerIdx: number, text: string) => {
     speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
-    // Set BEFORE speak() so startLipSync can attach onboundary/onend in time
+    // Must be set BEFORE startLipSync so the boundary handler can be attached to it
     (window as unknown as Record<string, unknown>).__currentUtterance = utter;
-    // Start lip sync first so handlers are attached before speaking begins
     startLipSync(speakerIdx, text);
-    speechSynthesis.speak(utter);
-    speak(text);
-  }, [speak, startLipSync]);
+    // Small defer so cancel() has fully flushed before enqueueing the new utterance
+    setTimeout(() => speechSynthesis.speak(utter), 50);
+  }, [startLipSync]);
 
   // ── Generate opening question from Gemini once personas are ready ──
   useEffect(() => {
