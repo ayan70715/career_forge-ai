@@ -158,7 +158,7 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
   });
 
   return (
-    <group ref={groupRef} position={[0, -0.6, 0]} rotation={[0, 0, 0]} scale={1}>
+    <group ref={groupRef} position={[0, -1.55, 0]} rotation={[0, 0, 0]} scale={1}>
       <primitive object={scene} />
     </group>
   );
