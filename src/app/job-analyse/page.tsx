@@ -135,7 +135,6 @@ export default function JobAnalyserPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [resumeFileName, setResumeFileName] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
-  
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -173,7 +172,7 @@ export default function JobAnalyserPage() {
       "Calculating salary positioning...",
       "Generating your report...",
     ];
-    // ── 1. Check user's Gemini API key ──
+
     const apiKey = getApiKey();
     if (!apiKey) {
       setError("Please configure your Gemini API key in Settings first.");
@@ -197,7 +196,6 @@ export default function JobAnalyserPage() {
       const targetRole = role.trim() || "Software Engineer";
       const targetCity = city.trim() || "Bangalore";
 
-      // ── 2. Fetch Adzuna data from server route (needs secret keys) ──
       let salaryMin = 6, salaryMax = 24, totalJobs = 0, trendingSkills: string[] = [];
 
       try {
@@ -214,10 +212,10 @@ export default function JobAnalyserPage() {
           trendingSkills = adzunaData.trendingSkills ?? [];
         }
       } catch {
-        // Graceful degradation — Gemini still runs with fallback salary data
+        // Graceful degradation
       }
 
-      // ── 3. Run Gemini analysis client-side using user's API key ──
+      // ── Improved prompt with specific missingSkills instructions ──
       const prompt = `
 You are a career analyst specialising in the Indian tech job market.
 
@@ -232,13 +230,13 @@ CANDIDATE RESUME:
 ${resume.slice(0, 3000)}
 
 JOB DESCRIPTION (if provided):
-${jd ? jd.slice(0, 2000) : "Not provided — analyse against role generally"}
+${jd ? jd.slice(0, 2000) : "Not provided — analyse against the role and city market generally"}
 
 TASK: Analyse the candidate's fit and return ONLY valid JSON (no markdown, no backticks, no code fences):
 {
   "compatibilityScore": <0-100 integer>,
   "userSalaryEstimate": <integer in LPA within the ${salaryMin}–${salaryMax} range>,
-  "matchedSkills": [<up to 8 skills from their resume that match market demand>],
+  "matchedSkills": [<up to 8 skills EXPLICITLY found in the resume that match ${targetRole} demand>],
   "missingSkills": [
     { "skill": "<skill name>", "urgency": "critical" | "important" | "nice" }
   ],
@@ -247,19 +245,35 @@ TASK: Analyse the candidate's fit and return ONLY valid JSON (no markdown, no ba
     { "question": "...", "hint": "..." },
     { "question": "...", "hint": "..." }
   ],
-  "summary": "<2 sentence honest assessment of candidate fit>"
+  "summary": "<2 sentence honest assessment of candidate fit for ${targetRole} in ${targetCity}>"
 }
 
-Rules:
-- compatibilityScore must reflect resume vs JD/role match HONESTLY
-- missingSkills must only list skills genuinely absent from the resume
-- userSalaryEstimate must be between ${salaryMin} and ${salaryMax}
-- cheatSheet questions must be specific to ${targetRole} in ${targetCity}
-- Return ONLY the JSON object, nothing else, no markdown
+STRICT RULES FOR missingSkills:
+- Read the CANDIDATE RESUME carefully. Only list skills that are genuinely absent or not demonstrated.
+- Skills must be SPECIFIC and TECHNICAL for "${targetRole}" roles in ${targetCity} — not generic soft skills.
+- If a JD is provided, prioritise skills explicitly mentioned in the JD that are missing from the resume.
+- If no JD, use the trending market skills for "${targetRole}" in ${targetCity} as the benchmark.
+- Examples of good missing skills for Frontend Developer: "React Testing Library", "Web Accessibility (WCAG)", "GraphQL", "Storybook", "Cypress"
+- Examples of good missing skills for Data Scientist: "MLflow", "Feature Engineering", "PySpark", "A/B Testing", "Databricks"
+- NEVER return generic skills like "Communication", "Teamwork", "Problem Solving", "Leadership"
+- Maximum 6 missing skills. Each must be a real, named technology, framework, tool, or methodology.
+- urgency="critical" only if the skill appears in the JD or top 3 trending skills for the role
+- urgency="important" if it appears frequently in ${targetCity} job postings for this role
+- urgency="nice" if it would strengthen the profile but is not commonly required
+
+STRICT RULES FOR matchedSkills:
+- Only list skills you can find EXPLICITLY in the resume text above
+- Do not infer or assume skills from job titles
+
+STRICT RULES FOR compatibilityScore:
+- If JD is provided: score based on overlap between resume skills and JD requirements
+- If no JD: score based on overlap between resume skills and typical ${targetRole} requirements in ${targetCity}
+- Be honest — a junior resume should score lower than a senior one for the same role
+
+Return ONLY the JSON object, nothing else, no markdown.
 `;
 
       let raw = await generateWithRetry(prompt);
-      // Strip any markdown fences Gemini might add
       raw = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
       const geminiResult = JSON.parse(raw);
 
@@ -291,13 +305,12 @@ Rules:
 
   const launchInterview = () => {
     if (!result) return;
-    
     localStorage.setItem("interviewConfig", JSON.stringify({
       role: result.roleTitle,
       type: "technical",
       interviewerCount: 2,
       duration: 20,
-      resume: resume,
+      resumeText: resume,
     }));
     router.push("/interview-prep/room");
   };
@@ -340,11 +353,14 @@ Rules:
         {step === "input" && (
           <div style={{ maxWidth: "900px", margin: "0 auto", padding: "48px 24px" }}>
 
-            {/* Hero */}
+            {/* Hero — restored with clamp font size and gradient span */}
             <div style={{ textAlign: "center", marginBottom: "48px" }}>
               <div style={{ display: "inline-block", fontSize: "11px", padding: "4px 14px", borderRadius: "20px", background: "rgba(99,210,255,0.08)", color: "#63d2ff", marginBottom: "16px", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", border: "1px solid rgba(99,210,255,0.2)" }}>POWERED BY ADZUNA + GEMINI</div>
-              <h1 style={{ fontSize: "36px", fontWeight: 800, lineHeight: 1.15, marginBottom: "16px" }}>
-                Know Exactly Where<br />You Stand in the Market
+              <h1 style={{ fontSize: "clamp(28px, 5vw, 52px)", fontWeight: 800, lineHeight: 1.1, marginBottom: "16px" }}>
+                Know Exactly Where<br />
+                <span style={{ background: "linear-gradient(90deg, #63d2ff 0%, #3b82f6 50%, #a78bfa 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                  You Stand in the Market
+                </span>
               </h1>
               <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "16px", maxWidth: "480px", margin: "0 auto" }}>
                 Real-time salary data · AI gap analysis · Interview prep — in 30 seconds.
