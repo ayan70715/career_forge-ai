@@ -293,6 +293,7 @@ Return ONLY the JSON object, nothing else, no markdown.
           setError("⚠️ Gemini failed — using fallback AI");
           try {
             raw = await (window as any).puter.ai.chat(prompt);
+            if (typeof raw !== "string") raw = raw?.message?.content ?? raw?.text ?? JSON.stringify(raw);
           } catch {
             throw new Error("Both Gemini and fallback AI failed. Please try again.");
           }
@@ -300,6 +301,7 @@ Return ONLY the JSON object, nothing else, no markdown.
       } else {
         try {
           raw = await (window as any).puter.ai.chat(prompt);
+          if (typeof raw !== "string") raw = raw?.message?.content ?? raw?.text ?? JSON.stringify(raw);
         } catch {
           throw new Error("AI unavailable. Please configure your Gemini API key in Settings.");
         }
