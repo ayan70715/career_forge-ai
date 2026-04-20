@@ -260,7 +260,7 @@ TASK: Analyse the candidate's fit and return ONLY valid JSON (no markdown, no ba
 
 STRICT RULES FOR missingSkills:
 - Read the CANDIDATE RESUME carefully. Only list skills that are genuinely absent or not demonstrated.
-- Skills must be SPECIFIC and TECHNICAL for "${targetRole}" roles in ${targetCity} — not generic soft skills.
+- Skills must be SPECIFIC and TECHNICAL for "${targetRole}" roles in ${targetCity} — not generic soft skills and trending but irrelevant tech skills.
 - If a JD is provided, prioritise skills explicitly mentioned in the JD that are missing from the resume.
 - If no JD, use the trending market skills for "${targetRole}" in ${targetCity} as the benchmark.
 - Examples of good missing skills for Frontend Developer: "React Testing Library", "Web Accessibility (WCAG)", "GraphQL", "Storybook", "Cypress"
