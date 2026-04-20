@@ -135,6 +135,16 @@ export default function JobAnalyserPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [resumeFileName, setResumeFileName] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
+  const [geminiFailed, setGeminiFailed] = useState(false);
+
+  // ── Load Puter.js fallback ──
+  useEffect(() => {
+    const s = document.createElement("script");
+    s.src = "https://js.puter.com/v2/";
+    s.async = true;
+    document.body.appendChild(s);
+    return () => { document.body.removeChild(s); };
+  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -174,12 +184,12 @@ export default function JobAnalyserPage() {
     ];
 
     const apiKey = getApiKey();
-    if (!apiKey) {
+    if (!resume.trim()) { setError("Please paste your resume."); return; }
+    if (!jd.trim() && !role.trim()) { setError("Please paste a JD or select a role."); return; }
+    if (!apiKey && !(window as any).puter) {
       setError("Please configure your Gemini API key in Settings first.");
       return;
     }
-    if (!resume.trim()) { setError("Please paste your resume."); return; }
-    if (!jd.trim() && !role.trim()) { setError("Please paste a JD or select a role."); return; }
 
     setError(null);
     setStep("loading");
@@ -273,7 +283,27 @@ STRICT RULES FOR compatibilityScore:
 Return ONLY the JSON object, nothing else, no markdown.
 `;
 
-      let raw = await generateWithRetry(prompt);
+      // ── Gemini with Puter.js fallback ──
+      let raw = "";
+      if (apiKey && !geminiFailed) {
+        try {
+          raw = await generateWithRetry(prompt);
+        } catch (err: any) {
+          setGeminiFailed(true);
+          setError("⚠️ Gemini failed — using fallback AI");
+          try {
+            raw = await (window as any).puter.ai.chat(prompt);
+          } catch {
+            throw new Error("Both Gemini and fallback AI failed. Please try again.");
+          }
+        }
+      } else {
+        try {
+          raw = await (window as any).puter.ai.chat(prompt);
+        } catch {
+          throw new Error("AI unavailable. Please configure your Gemini API key in Settings.");
+        }
+      }
       raw = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
       const geminiResult = JSON.parse(raw);
 
