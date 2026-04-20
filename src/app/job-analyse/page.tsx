@@ -291,11 +291,13 @@ Rules:
 
   const launchInterview = () => {
     if (!result) return;
+    
     localStorage.setItem("interviewConfig", JSON.stringify({
       role: result.roleTitle,
       type: "technical",
       interviewerCount: 2,
       duration: 20,
+      resume: resume,
     }));
     router.push("/interview-prep/room");
   };
