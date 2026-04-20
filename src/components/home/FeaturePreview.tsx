@@ -382,77 +382,180 @@ export function ProjectAnalysePreview() {
   );
 }
 
-/* ── Job Analyser: Animated job match radar ── */
+/* ── Job Analyser: Skeleton of the real Job Analyse page ── */
 export function JobAnalysePreview() {
-  const [progress, setProgress] = useState([0, 0, 0]);
-  const targets = [85, 70, 93];
-  const labels = ["Skills Match", "Culture Fit", "Salary Align"];
-  const colors = [
-    "from-sky-500 to-blue-500",
-    "from-blue-400 to-sky-400",
-    "from-cyan-500 to-blue-500",
-  ];
+  const [score, setScore] = useState(0);
+  const [salaryPos, setSalaryPos] = useState(0);
+  const [gapsVisible, setGapsVisible] = useState(false);
+  const [questionsVisible, setQuestionsVisible] = useState(false);
+  const targetScore = 68;
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      targets.forEach((target, i) => {
-        setTimeout(() => {
-          const interval = setInterval(() => {
-            setProgress((prev) => {
-              const next = [...prev];
-              if (next[i] >= target) {
-                clearInterval(interval);
-              } else {
-                next[i] = Math.min(next[i] + 2, target);
-              }
-              return next;
-            });
-          }, 18);
-        }, i * 250);
-      });
-    }, 400);
-    return () => clearTimeout(timer);
+    // Animate score gauge
+    const scoreTimer = setTimeout(() => {
+      const interval = setInterval(() => {
+        setScore((prev) => {
+          if (prev >= targetScore) { clearInterval(interval); return targetScore; }
+          return prev + 2;
+        });
+      }, 30);
+      return () => clearInterval(interval);
+    }, 300);
+
+    // Animate salary thumb sliding in
+    const salaryTimer = setTimeout(() => {
+      setSalaryPos(45);
+    }, 800);
+
+    // Reveal gap alerts
+    const gapTimer = setTimeout(() => setGapsVisible(true), 1200);
+
+    // Reveal interview questions
+    const qTimer = setTimeout(() => setQuestionsVisible(true), 1600);
+
+    return () => {
+      clearTimeout(scoreTimer);
+      clearTimeout(salaryTimer);
+      clearTimeout(gapTimer);
+      clearTimeout(qTimer);
+    };
   }, []);
 
+  const circumference = 2 * Math.PI * 22;
+  const offset = circumference - (score / 100) * circumference;
+
+  const gaps = [
+    { label: "React", priority: "MUST HAVE", color: "text-rose-400 border-rose-500/30 bg-rose-500/10" },
+    { label: "AWS", priority: "IMPORTANT", color: "text-amber-400 border-amber-500/30 bg-amber-500/10" },
+    { label: "Docker", priority: "IMPORTANT", color: "text-amber-400 border-amber-500/30 bg-amber-500/10" },
+  ];
+
   return (
-    <div className="p-1">
-      <div className="rounded-lg border border-glass-border bg-surface-1 p-3 space-y-2.5">
-        {/* Pulsing match score badge */}
-        <div className="flex items-center justify-between mb-1">
-          <div className="h-1.5 w-16 rounded-full bg-surface-5" />
-          <div className="flex items-center gap-1">
-            <div className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-[pulse_1.5s_ease-in-out_infinite]" />
-            <div className="h-4 w-12 rounded-full border border-sky-500/30 bg-sky-500/10 flex items-center justify-center">
-              <span className="text-[9px] font-mono text-sky-400">Match</span>
+    <div className="p-1 space-y-1.5">
+      {/* ── Top row: Score + Salary ── */}
+      <div className="grid grid-cols-2 gap-1.5">
+
+        {/* Compatibility Score */}
+        <div className="rounded-lg border border-glass-border bg-surface-1 p-2 space-y-1.5">
+          <div className="h-[9px] w-20 rounded-full bg-sky-500/20" />
+          <div className="flex items-center gap-2">
+            {/* Mini gauge */}
+            <div className="relative shrink-0">
+              <svg width="52" height="52" viewBox="0 0 52 52" className="-rotate-90">
+                <circle cx="26" cy="26" r="22" fill="none" stroke="var(--surface-4)" strokeWidth="4" />
+                <circle
+                  cx="26" cy="26" r="22"
+                  fill="none"
+                  stroke="url(#jobGauge)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={offset}
+                  style={{ transition: "stroke-dashoffset 0.08s ease" }}
+                />
+                <defs>
+                  <linearGradient id="jobGauge" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#f59e0b" />
+                    <stop offset="100%" stopColor="#f97316" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-[11px] font-bold text-amber-400 leading-none">{score}</span>
+                <span className="text-[7px] text-muted-foreground leading-none mt-0.5">MATCH</span>
+              </div>
+            </div>
+            {/* Skill tags */}
+            <div className="flex flex-col gap-1 min-w-0">
+              <div className="flex gap-1 flex-wrap">
+                <div className="h-3.5 w-10 rounded-sm border border-emerald-500/30 bg-emerald-500/10" />
+                <div className="h-3.5 w-12 rounded-sm border border-emerald-500/30 bg-emerald-500/10" />
+              </div>
+              <div className="flex gap-1 flex-wrap">
+                <div className="h-3.5 w-14 rounded-sm border border-emerald-500/30 bg-emerald-500/10" />
+                <div className="h-3.5 w-8 rounded-sm border border-emerald-500/30 bg-emerald-500/10" />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Match bars */}
-        {labels.map((label, i) => (
-          <div key={label} className="space-y-1">
-            <div className="flex items-center justify-between">
-              <div className="h-1.5 rounded-full bg-surface-5" style={{ width: `${label.length * 5.5}px` }} />
-              <span className="text-[9px] font-mono text-sky-400/70">{progress[i]}%</span>
-            </div>
-            <div className="h-1.5 w-full rounded-full bg-surface-3 overflow-hidden">
-              <div
-                className={`h-full rounded-full bg-linear-to-r ${colors[i]} transition-all duration-75`}
-                style={{ width: `${progress[i]}%` }}
-              />
-            </div>
+        {/* Salary Benchmark */}
+        <div className="rounded-lg border border-glass-border bg-surface-1 p-2 space-y-1.5">
+          <div className="h-[9px] w-24 rounded-full bg-blue-500/20" />
+          {/* Salary range labels */}
+          <div className="flex justify-between">
+            <span className="text-[8px] text-muted-foreground">₹6L</span>
+            <span className="text-[8px] text-blue-400 font-mono">₹12L</span>
+            <span className="text-[8px] text-muted-foreground">₹24L</span>
           </div>
-        ))}
+          {/* Slider track */}
+          <div className="relative h-1.5 w-full rounded-full bg-surface-3 overflow-visible">
+            <div
+              className="absolute inset-y-0 left-0 rounded-full bg-linear-to-r from-blue-600 to-indigo-400 transition-all duration-700 ease-out"
+              style={{ width: `${salaryPos}%` }}
+            />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3 w-3 rounded-full bg-rose-400 border border-white/20 shadow-[0_0_6px_rgba(244,63,94,0.6)] transition-all duration-700 ease-out"
+              style={{ left: `${salaryPos}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[8px] text-muted-foreground">
+            <span>Entry</span>
+            <span>Senior</span>
+          </div>
+          {/* Benchmark note */}
+          <div className="h-[9px] w-full rounded-full bg-surface-3" />
+        </div>
+      </div>
 
-        {/* Scrolling job listing lines */}
-        <div className="mt-1 space-y-1 opacity-50">
-          <div className="flex gap-1.5">
-            <div className="h-2 w-2 rounded-sm bg-sky-500/30 shrink-0 mt-0.5" />
-            <div className="h-1.5 w-full rounded-full bg-surface-4" />
+      {/* ── Bottom row: Gap Alerts + Interview Sheet ── */}
+      <div className="grid grid-cols-2 gap-1.5">
+
+        {/* Critical Gap Alerts */}
+        <div className="rounded-lg border border-glass-border bg-surface-1 p-2 space-y-1.5">
+          <div className="flex items-center gap-1 mb-1">
+            <div className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+            <div className="h-[9px] w-20 rounded-full bg-amber-500/20" />
           </div>
-          <div className="flex gap-1.5">
-            <div className="h-2 w-2 rounded-sm bg-blue-500/30 shrink-0 mt-0.5" />
-            <div className="h-1.5 w-[80%] rounded-full bg-surface-3" />
+          <div className="space-y-1">
+            {gaps.map((gap, i) => (
+              <div
+                key={gap.label}
+                className={`flex items-center justify-between rounded px-1.5 py-1 border transition-all duration-300 ${
+                  gapsVisible ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2"
+                }`}
+                style={{ transitionDelay: `${i * 120}ms`, borderColor: "rgba(255,255,255,0.06)", background: "var(--surface-2)" }}
+              >
+                <div className="h-[9px] rounded-full bg-surface-5" style={{ width: `${gap.label.length * 5}px` }} />
+                <div className={`text-[7px] font-bold px-1 py-0.5 rounded border ${gap.color}`}>
+                  {gap.priority === "MUST HAVE" ? "MUST" : "IMP"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Interview Cheat Sheet */}
+        <div className="rounded-lg border border-glass-border bg-surface-1 p-2 space-y-1.5">
+          <div className="flex items-center gap-1 mb-1">
+            <div className="h-1.5 w-1.5 rounded-full bg-rose-400 animate-[pulse_1.5s_ease-in-out_infinite]" />
+            <div className="h-[9px] w-20 rounded-full bg-rose-500/20" />
+          </div>
+          <div className="space-y-1.5">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className={`space-y-0.5 transition-all duration-300 ${
+                  questionsVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+                }`}
+                style={{ transitionDelay: `${i * 150}ms` }}
+              >
+                <div className="h-[9px] w-full rounded-full bg-surface-5" />
+                <div className="h-[9px] w-[80%] rounded-full bg-surface-4" />
+                <div className="h-[8px] w-full rounded-full bg-surface-3 opacity-50" />
+                <div className="h-[8px] w-[70%] rounded-full bg-surface-3 opacity-40" />
+              </div>
+            ))}
           </div>
         </div>
       </div>
