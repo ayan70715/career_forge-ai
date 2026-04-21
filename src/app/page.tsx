@@ -272,6 +272,9 @@ export default function HomePage() {
                 <p className="text-xs text-muted-foreground">
                   AI-powered analysis of strength and uniqueness of your projects
                 </p>
+                </div>
+                   <JobAnalysePreview />
+                </div>
               </div>
             </BentoCard>
           </motion.div>
