@@ -479,6 +479,37 @@ export default function InterviewRoomClient() {
     tick();
   }, []);
 
+  // ── Camera toggle ──
+  const toggleCamera = useCallback(async () => {
+    if (!isCameraOn) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        streamRef.current = stream;
+        setIsCameraOn(true);
+      } catch {
+        setError("Camera access denied");
+      }
+    } else {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
+      setIsCameraOn(false);
+    }
+  }, [isCameraOn]);
+
+  // ── Speak helper — speaks text as persona[speakerIdx] ──
+  // Only uses speechSynthesis directly — the useTextToSpeech speak() call was removed
+  // because it queued a second competing utterance that broke boundary events.
+  const speakAs = useCallback((speakerIdx: number, text: string) => {
+    speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    // Must be set BEFORE startLipSync so the boundary handler can be attached to it
+    (window as unknown as Record<string, unknown>).__currentUtterance = utter;
+    startLipSync(speakerIdx, text);
+    // Small defer so cancel() has fully flushed before enqueueing the new utterance
+    setTimeout(() => speechSynthesis.speak(utter), 50);
+  }, [startLipSync]);
+
   // ── Generate opening question from Gemini once personas are ready ──
   useEffect(() => {
     if (!personasReady || interviewStarted.current) return;
@@ -514,37 +545,6 @@ Respond with just the spoken text, nothing else.`;
         setTranscriptLines([`${firstPersona.name}: ${fallback}`]);
       });
   }, [personasReady, personas, config, speakAs]);
-
-  // ── Camera toggle ──
-  const toggleCamera = useCallback(async () => {
-    if (!isCameraOn) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        streamRef.current = stream;
-        setIsCameraOn(true);
-      } catch {
-        setError("Camera access denied");
-      }
-    } else {
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-      if (videoRef.current) videoRef.current.srcObject = null;
-      setIsCameraOn(false);
-    }
-  }, [isCameraOn]);
-
-  // ── Speak helper — speaks text as persona[speakerIdx] ──
-  // Only uses speechSynthesis directly — the useTextToSpeech speak() call was removed
-  // because it queued a second competing utterance that broke boundary events.
-  const speakAs = useCallback((speakerIdx: number, text: string) => {
-    speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    // Must be set BEFORE startLipSync so the boundary handler can be attached to it
-    (window as unknown as Record<string, unknown>).__currentUtterance = utter;
-    startLipSync(speakerIdx, text);
-    // Small defer so cancel() has fully flushed before enqueueing the new utterance
-    setTimeout(() => speechSynthesis.speak(utter), 50);
-  }, [startLipSync]);
 
   // ── Handle candidate message — Gemini decides next speaker + generates response ──
   const handleUserMessage = useCallback(async (userText: string) => {
