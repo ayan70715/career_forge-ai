@@ -1,19 +1,47 @@
 "use client";
 
+
 import { useEffect, useRef, useState, useCallback, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useGLTF, useAnimations, Environment } from "@react-three/drei";
+import { useGLTF, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { useRouter } from "next/navigation";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
-import { getDefaultPersonas } from "@/lib/interview/personaGenerator";
+import { generatePersonas, getDefaultPersonas } from "@/lib/interview/personaGenerator";
+import type { InterviewerPersona } from "@/lib/interview/personaGenerator";
 import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
+
+// ─────────────────────────────────────────────────────
+// Puter.js fallback — used when Gemini quota is exceeded
+// puter is loaded via CDN script tag (window.puter), no npm install needed
+// ─────────────────────────────────────────────────────
+async function generateWithPuter(prompt: string): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const puter = (window as any).puter;
+  if (!puter?.ai?.chat) throw new Error("Puter not available");
+  const response = await puter.ai.chat(prompt, { model: "gpt-4o-mini" });
+  // puter.ai.chat returns either a string or {message:{content:string}}
+  if (typeof response === "string") return response;
+  return response?.message?.content ?? response?.content ?? String(response);
+}
+
+// Tries Gemini first; on quota/rate-limit errors falls back to puter.js
+async function generateWithFallback(prompt: string): Promise<string> {
+  try {
+    return await generateWithRetry(prompt);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Quota exceeded (429) or any Gemini error → try puter
+    console.warn("[AI] Gemini failed, trying puter.js fallback:", msg);
+    return await generateWithPuter(prompt);
+  }
+}
 
 // ─────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────
-type Message = { role: "user" | "assistant"; content: string };
+type Message = { role: "user" | "assistant"; speakerIndex: number; content: string };
 
 interface AvatarSignal {
   isSpeaking: boolean;
@@ -21,124 +49,20 @@ interface AvatarSignal {
   viseme: string;
 }
 
-// ─────────────────────────────────────────────────────
-// Interview-type configs
-// ─────────────────────────────────────────────────────
-const INTERVIEW_CONFIGS: Record<string, {
-  label: string;
-  openingQuestion: (role: string) => string;
-  systemPrompt: (role: string, history: string) => string;
-}> = {
-  technical: {
-    label: "Technical",
-    openingQuestion: (role) =>
-      `Hi! Let's begin your ${role || "engineering"} technical interview. What's your primary programming language, and roughly how many years have you been using it?`,
-    systemPrompt: (role, history) => `You are a senior ${role || "Software Engineer"} conducting a technical interview.
+interface InterviewConfig {
+  role: string;
+  type: string;
+  interviewerCount: number;
+  duration: number;
+  resumeText: string | null;
+}
 
-Interview type: TECHNICAL
-Focus areas (in priority order):
-1. Language-specific concepts (syntax, type system, memory, concurrency)
-2. Data structures and algorithms
-3. Problem-solving and code reasoning
-4. Debugging and code quality
-5. Frameworks and tooling specific to the role
-
-Conversation so far:
-${history}
-
-Rules:
-- Ask ONE short-answer or concept question (e.g. "What's the difference between X and Y?", "How does Z work?", "What would you use X for?")
-- Prefer conceptual/short-answer questions over coding or design questions (80% short-answer, 20% scenario)
-- NEVER ask system design questions (no "design Twitter", "design a URL shortener", etc.)
-- NEVER ask open-ended "tell me about a project" questions
-- If the candidate's last answer was incomplete or incorrect, give a brief 1-sentence correction then ask next question
-- Keep your ENTIRE response under 40 words
-- Do NOT add filler, preamble, or pleasantries
-
-Your response:`,
-  },
-
-  hr: {
-    label: "HR",
-    openingQuestion: (role) =>
-      `Hi! Welcome to your HR round for ${role || "this position"}. In two sentences, why are you looking for a new opportunity?`,
-    systemPrompt: (role, history) => `You are an HR interviewer conducting a behavioral screening round for a ${role || "professional"} role.
-
-Interview type: HR
-Focus areas (in priority order):
-1. Motivation and career goals
-2. Communication and teamwork
-3. Strengths and weaknesses
-4. Culture fit and values
-5. Salary expectations and availability
-
-Conversation so far:
-${history}
-
-Rules:
-- Ask ONE focused question at a time
-- Prefer short direct questions (e.g. "What's your biggest strength?", "Where do you see yourself in 3 years?")
-- Avoid multi-part questions
-- Keep your ENTIRE response under 35 words
-- No filler or pleasantries
-
-Your response:`,
-  },
-
-  system: {
-    label: "System Design",
-    openingQuestion: (role) =>
-      `Hi! Let's start your system design interview for ${role || "this role"}. Before we dive in — what's your preferred tech stack?`,
-    systemPrompt: (role, history) => `You are a staff engineer conducting a system design interview for a ${role || "Software Engineer"} role.
-
-Interview type: SYSTEM DESIGN
-Focus areas (in priority order):
-1. Clarifying requirements (start here)
-2. High-level architecture components
-3. Scalability and bottlenecks
-4. Data modeling and storage choices
-5. Trade-offs and alternatives
-
-Conversation so far:
-${history}
-
-Rules:
-- Ask ONE focused question that advances the design discussion
-- Prefer short-answer clarification questions early (e.g. "What's the expected read/write ratio?", "Do we need real-time updates?")
-- Save open-ended design questions for after requirements are clear
-- Give brief feedback (1 sentence max) before your question
-- Keep your ENTIRE response under 45 words
-
-Your response:`,
-  },
-
-  behavioral: {
-    label: "Behavioral",
-    openingQuestion: (role) =>
-      `Hi! Let's begin your behavioral interview for ${role || "this role"}. Briefly — what's a recent project you're most proud of?`,
-    systemPrompt: (role, history) => `You are an engineering manager conducting a behavioral (STAR-method) interview for a ${role || "professional"} role.
-
-Interview type: BEHAVIORAL
-Focus areas (in priority order):
-1. Conflict resolution and teamwork
-2. Leadership and ownership
-3. Handling failure and learning
-4. Prioritization under pressure
-5. Cross-functional collaboration
-
-Conversation so far:
-${history}
-
-Rules:
-- Ask ONE behavioral question using STAR framing (situation/task/action/result)
-- Prefer targeted short-answer follow-ups when a candidate gives a vague answer (e.g. "What was the outcome?", "Who was involved?")
-- Only ask full STAR-style questions every 3rd turn
-- Keep your ENTIRE response under 40 words
-- No filler or pleasantries
-
-Your response:`,
-  },
-};
+// Model paths mapped by 0-based index
+const MODEL_PATHS = [
+  "/avatars/model1.glb",
+  "/avatars/model2.glb",
+  "/avatars/model3.glb",
+];
 
 // ─────────────────────────────────────────────────────
 // Phoneme → viseme helper
@@ -183,15 +107,19 @@ const BLINK_CANDIDATES = [
 ];
 
 // ─────────────────────────────────────────────────────
-// 3D Avatar
+// 3D Avatar — loads the model at the given path
 // ─────────────────────────────────────────────────────
-function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
-  const { scene, animations } = useGLTF("/avatars/model.glb");
+function Avatar({
+  signal,
+  modelPath,
+}: {
+  signal: React.MutableRefObject<AvatarSignal>;
+  modelPath: string;
+}) {
+  const { scene } = useGLTF(modelPath);
   const groupRef = useRef<THREE.Group>(null);
-
   const morphMeshes = useRef<THREE.SkinnedMesh[]>([]);
   const headBone = useRef<THREE.Object3D | null>(null);
-
   const blinkTimer = useRef(0);
   const blinkPhase = useRef<"idle" | "closing" | "opening">("idle");
   const blinkProgress = useRef(0);
@@ -199,6 +127,8 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
   const idleT = useRef(Math.random() * 100);
 
   useEffect(() => {
+    morphMeshes.current = [];
+    headBone.current = null;
     scene.traverse((child) => {
       const sm = child as THREE.SkinnedMesh;
       if (sm.isSkinnedMesh && sm.morphTargetDictionary) {
@@ -216,7 +146,7 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
     if (headBone.current) {
       headBone.current.rotation.x = THREE.MathUtils.lerp(
         headBone.current.rotation.x,
-        0.032 + Math.sin(t * 0.35) * 0.015,
+        -0.35 + Math.sin(t * 0.35) * 0.015, 
         0.05
       );
       headBone.current.rotation.y = THREE.MathUtils.lerp(
@@ -243,8 +173,14 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
       blinkValue = Math.min(1, blinkProgress.current);
       if (blinkPhase.current === "opening") blinkValue = 1 - blinkValue;
       if (blinkProgress.current >= 1) {
-        if (blinkPhase.current === "closing") { blinkPhase.current = "opening"; blinkProgress.current = 0; }
-        else { blinkPhase.current = "idle"; nextBlink.current = 2 + Math.random() * 3; blinkValue = 0; }
+        if (blinkPhase.current === "closing") {
+          blinkPhase.current = "opening";
+          blinkProgress.current = 0;
+        } else {
+          blinkPhase.current = "idle";
+          nextBlink.current = 2 + Math.random() * 3;
+          blinkValue = 0;
+        }
       }
     }
 
@@ -257,43 +193,56 @@ function Avatar({ signal }: { signal: React.MutableRefObject<AvatarSignal> }) {
         if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], blinkValue, 0.4);
       });
 
+      const { isSpeaking, amplitude, viseme } = signal.current;
+      const activeVisemeMorphs = new Set(
+        (VISEME_MORPH_CANDIDATES[viseme] ?? VISEME_MORPH_CANDIDATES["aa"])
+      );
+
+      // Decay all viseme morphs toward 0 — but skip the currently active ones
+      // so the decay lerp doesn't fight the drive lerp on the same frame
       Object.values(VISEME_MORPH_CANDIDATES).flat().forEach((name) => {
+        if (isSpeaking && activeVisemeMorphs.has(name)) return; // driven below
         const idx = dict[name];
-        if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], 0, 0.35);
+        if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], 0, 0.25);
       });
 
-      const { isSpeaking, amplitude, viseme } = signal.current;
-      if (isSpeaking && amplitude > 0.05) {
-        const candidates = VISEME_MORPH_CANDIDATES[viseme] || VISEME_MORPH_CANDIDATES["aa"];
-        candidates.forEach((name) => {
+      // Drive the active viseme morph targets toward the current amplitude
+      if (isSpeaking && amplitude > 0.02) {
+        activeVisemeMorphs.forEach((name) => {
           const idx = dict[name];
-          if (idx !== undefined) inf[idx] = THREE.MathUtils.lerp(inf[idx], amplitude, 0.55);
+          if (idx !== undefined) {
+            inf[idx] = THREE.MathUtils.lerp(inf[idx], amplitude, 0.45);
+          }
         });
       }
     });
   });
 
   return (
-    <group ref={groupRef} position={[0, -1.55, 0]} rotation={[0, 0, 0]} scale={1}>
+    <group ref={groupRef} position={[0, -1.65, 0]} rotation={[0, 0, 0]} scale={1}>
       <primitive object={scene} />
     </group>
   );
 }
 
 // ─────────────────────────────────────────────────────
-// Avatar tile card
+// Avatar tile — loads the correct model per index
 // ─────────────────────────────────────────────────────
 function AvatarTile({
   name,
   title,
   signal,
   speaking,
+  modelIndex,
 }: {
   name: string;
   title: string;
   signal: React.MutableRefObject<AvatarSignal>;
   speaking: boolean;
+  modelIndex: number;
 }) {
+  const modelPath = MODEL_PATHS[modelIndex] ?? MODEL_PATHS[0];
+
   return (
     <div style={{
       position: "relative", borderRadius: "16px", overflow: "hidden",
@@ -301,7 +250,7 @@ function AvatarTile({
       border: speaking ? "1.5px solid rgba(82,196,255,0.7)" : "1.5px solid rgba(255,255,255,0.07)",
       boxShadow: speaking ? "0 0 20px rgba(82,196,255,0.2)" : "0 4px 24px rgba(0,0,0,0.4)",
       transition: "border 0.3s ease, box-shadow 0.3s ease",
-      height: "100%", minHeight: "260px",
+      height: "100%",
     }}>
       {speaking && (
         <div style={{
@@ -314,7 +263,7 @@ function AvatarTile({
 
       <Canvas
         shadows
-        camera={{ position: [0, 0.15, 1.7], fov: 15 }}
+        camera={{ position: [0, 0.28, 0.69], fov: 23 }} 
         gl={{ antialias: true, alpha: true }}
         style={{ height: "100%", width: "100%", background: "transparent" }}
       >
@@ -324,7 +273,7 @@ function AvatarTile({
         <pointLight position={[0, 1.5, 1.5]} intensity={0.4} color="#52c4ff" />
         <Environment preset="studio" />
         <Suspense fallback={null}>
-          <Avatar signal={signal} />
+          <Avatar signal={signal} modelPath={modelPath} />
         </Suspense>
       </Canvas>
 
@@ -358,12 +307,19 @@ function AvatarTile({
 // ─────────────────────────────────────────────────────
 export default function InterviewRoomClient() {
   const router = useRouter();
-  const { speak, stop } = useTextToSpeech();
+  const { stop } = useTextToSpeech();
   const { start, stop: stopSTT, transcript: liveText, finalTranscript } = useSpeechToText();
 
-  const [config, setConfig] = useState({
-    role: "", type: "technical", interviewerCount: 2, duration: 20,
+  const [config, setConfig] = useState<InterviewConfig>({
+    role: "", type: "technical", interviewerCount: 2, duration: 20, resumeText: null,
   });
+
+  // Personas start as defaults, get replaced by Gemini-generated ones after mount
+  const [personas, setPersonas] = useState<InterviewerPersona[]>(() =>
+    getDefaultPersonas(2)
+  );
+  const [personasReady, setPersonasReady] = useState(false);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [transcriptLines, setTranscriptLines] = useState<string[]>([]);
   const [textInput, setTextInput] = useState("");
@@ -373,11 +329,13 @@ export default function InterviewRoomClient() {
   const [activeSpeaker, setActiveSpeaker] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [isThinking, setIsThinking] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const lipSyncAlive = useRef(false);
+  const interviewStarted = useRef(false);
 
   const signalRefs = useRef<React.MutableRefObject<AvatarSignal>[]>([
     { current: { isSpeaking: false, amplitude: 0, viseme: "sil" } },
@@ -385,20 +343,46 @@ export default function InterviewRoomClient() {
     { current: { isSpeaking: false, amplitude: 0, viseme: "sil" } },
   ]);
 
-  // ── Config ──
+  // ── Load config + generate Gemini personas ──
   useEffect(() => {
+    let stored: InterviewConfig = {
+      role: "", type: "technical", interviewerCount: 2, duration: 20, resumeText: null,
+    };
     try {
       const s = localStorage.getItem("interviewConfig");
-      if (s) setConfig(JSON.parse(s));
+      if (s) stored = JSON.parse(s);
     } catch {}
-  }, []);
+    setConfig(stored);
 
-  const personas = getDefaultPersonas(config.interviewerCount);
+    const count = Math.min(stored.interviewerCount || 2, 3);
+
+    // Generate role-aware personas from Gemini
+    generatePersonas(stored.role, stored.type, count)
+      .then((generated) => {
+        setPersonas(generated);
+        setPersonasReady(true);
+      })
+      .catch(() => {
+        setPersonas(getDefaultPersonas(count));
+        setPersonasReady(true);
+      });
+  }, []);
 
   // ── Timer ──
   useEffect(() => {
     const id = setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // ── Load puter.js CDN for AI fallback ──
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).puter) return; // already loaded
+    const script = document.createElement("script");
+    script.src = "https://js.puter.com/v2/";
+    script.async = true;
+    document.head.appendChild(script);
   }, []);
 
   // ── Cleanup ──
@@ -416,7 +400,7 @@ export default function InterviewRoomClient() {
     }
   }, [transcriptLines]);
 
-  // ── Camera ──
+  // ── Camera srcObject assignment ──
   useEffect(() => {
     if (isCameraOn && streamRef.current && videoRef.current) {
       videoRef.current.srcObject = streamRef.current;
@@ -425,79 +409,109 @@ export default function InterviewRoomClient() {
   }, [isCameraOn]);
 
   // ── Lip sync driver ──
+  // Strategy: ALWAYS run the oscillation loop for smooth continuous mouth movement.
+  // Use onboundary ONLY to update the viseme shape — not as the sole animation driver,
+  // since boundary events are sparse (word-level) and unreliable in Chrome.
   const startLipSync = useCallback((speakerIdx: number, text: string) => {
+    // Kill any previous oscillation loop
     lipSyncAlive.current = false;
-    setTimeout(() => {
-      lipSyncAlive.current = true;
-      setActiveSpeaker(speakerIdx);
-      setIsSpeaking(true);
 
-      signalRefs.current.forEach((ref) => {
-        ref.current.isSpeaking = false;
-        ref.current.amplitude = 0;
-        ref.current.viseme = "sil";
-      });
-      signalRefs.current[speakerIdx].current.isSpeaking = true;
+    // Silence ALL avatars before activating the new speaker
+    signalRefs.current.forEach((ref) => {
+      ref.current.isSpeaking = false;
+      ref.current.amplitude = 0;
+      ref.current.viseme = "sil";
+    });
 
-      const words = text.trim().split(/\s+/);
-      const estimatedMs = words.length * 430;
+    setActiveSpeaker(speakerIdx);
+    setIsSpeaking(true);
+    signalRefs.current[speakerIdx].current.isSpeaking = true;
+    signalRefs.current[speakerIdx].current.viseme = "aa";
 
-      let useOscillation = true;
+    const sig = signalRefs.current[speakerIdx];
+    let speechEndedVia = false;
 
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        const currentUtter = (window as any).__currentUtterance;
-        if (currentUtter) {
-          useOscillation = false;
-          currentUtter.onboundary = (event: any) => {
-            const char = event.utterance.text.charAt(event.charIndex);
-            if (char) {
-              signalRefs.current[speakerIdx].current.viseme = charToViseme(char);
-              signalRefs.current[speakerIdx].current.amplitude = Math.random() * 0.5 + 0.5;
-            }
-          };
-        }
+    // Attach boundary handler to update viseme shape from real speech
+    const currentUtter = (window as unknown as Record<string, unknown>)
+      .__currentUtterance as SpeechSynthesisUtterance | undefined;
+
+    if (currentUtter) {
+      currentUtter.onboundary = (event: SpeechSynthesisEvent) => {
+        if (!sig.current.isSpeaking) return;
+        const char = event.utterance.text.charAt(event.charIndex);
+        if (char) sig.current.viseme = charToViseme(char);
+      };
+      currentUtter.onend = () => { speechEndedVia = true; };
+      currentUtter.onerror = () => { speechEndedVia = true; };
+    }
+
+    // Oscillation loop — always runs to keep mouth moving smoothly between boundaries
+    lipSyncAlive.current = true;
+    const words = text.trim().split(/\s+/);
+    const estimatedMs = Math.max(words.length * 420, 800);
+    const startTime = Date.now();
+    let phase = 0;
+
+    const tick = () => {
+      if (!lipSyncAlive.current) return;
+      if (!sig.current.isSpeaking) return;
+
+      const elapsedMs = Date.now() - startTime;
+      if (speechEndedVia || elapsedMs >= estimatedMs) {
+        sig.current.isSpeaking = false;
+        sig.current.amplitude = 0;
+        sig.current.viseme = "sil";
+        setIsSpeaking(false);
+        return;
       }
 
-      if (useOscillation) {
-        const startTime = Date.now();
-        let phase = 0;
-        const tick = () => {
-          if (!lipSyncAlive.current) return;
-          const elapsed = Date.now() - startTime;
-          if (elapsed >= estimatedMs) {
-            signalRefs.current[speakerIdx].current.isSpeaking = false;
-            signalRefs.current[speakerIdx].current.amplitude = 0;
-            signalRefs.current[speakerIdx].current.viseme = "sil";
-            setIsSpeaking(false);
-            return;
-          }
-          phase += 0.33;
-          const vowels = ["aa", "O", "E", "I", "U"];
-          const openness = Math.abs(Math.sin(phase * Math.PI));
-          signalRefs.current[speakerIdx].current.amplitude = 0.3 + openness * 0.6;
-          signalRefs.current[speakerIdx].current.viseme =
-            openness > 0.5 ? vowels[Math.floor(phase) % vowels.length] : "sil";
-          setTimeout(tick, 100);
-        };
-        tick();
+      phase += 0.38;
+      const vowels: string[] = ["aa", "O", "E", "I", "U"];
+      const openness = Math.abs(Math.sin(phase * Math.PI));
+      sig.current.amplitude = 0.12 + openness * 0.25;
+      if (openness > 0.45) {
+        sig.current.viseme = vowels[Math.floor(phase * 0.5) % vowels.length];
+      } else {
+        sig.current.viseme = "sil";
       }
-    }, 10);
+      setTimeout(tick, 80);
+    };
+    tick();
   }, []);
 
-  // ── First question ──
+  // ── Generate opening question from Gemini once personas are ready ──
   useEffect(() => {
-    if (!config.role && !config.type) return;
-    const interviewType = config.type in INTERVIEW_CONFIGS ? config.type : "technical";
-    const interviewCfg = INTERVIEW_CONFIGS[interviewType];
-    const q = interviewCfg.openingQuestion(config.role);
+    if (!personasReady || interviewStarted.current) return;
+    interviewStarted.current = true;
 
-    const utter = new SpeechSynthesisUtterance(q);
-    (window as any).__currentUtterance = utter;
-    speechSynthesis.speak(utter);
-    startLipSync(0, q);
-    setMessages([{ role: "assistant", content: q }]);
-    setTranscriptLines([`Interviewer: ${q}`]);
-  }, [config.role, config.type]);
+    const firstPersona = personas[0];
+    const resumeContext = config.resumeText
+      ? `\n\nCandidate's resume for context:\n${config.resumeText.slice(0, 1500)}`
+      : "";
+
+    const prompt = `You are ${firstPersona.name}, a ${firstPersona.role}.
+Your interviewing style: ${firstPersona.style}
+You are opening a ${config.type} interview for the role of "${config.role || "Software Engineer"}".${resumeContext}
+
+Generate a natural, professional opening statement and first question appropriate for your role and style.
+Keep it to 2-3 sentences. Be specific to the role and interview type. Do NOT say "certainly" or "sure".
+
+Respond with just the spoken text, nothing else.`;
+
+    generateWithFallback(prompt)
+      .then((openingText) => {
+        speakAs(0, openingText);
+        setMessages([{ role: "assistant", speakerIndex: 0, content: openingText }]);
+        setTranscriptLines([`${firstPersona.name}: ${openingText}`]);
+      })
+      .catch(() => {
+        // Fallback opening if Gemini fails
+        const fallback = `Hi, welcome to your ${config.type} interview for the ${config.role || "Software Engineer"} role. Let's start — can you briefly introduce yourself?`;
+        speakAs(0, fallback);
+        setMessages([{ role: "assistant", speakerIndex: 0, content: fallback }]);
+        setTranscriptLines([`${firstPersona.name}: ${fallback}`]);
+      });
+  }, [personasReady, personas, config, speakAs]);
 
   // ── Camera toggle ──
   const toggleCamera = useCallback(async () => {
@@ -517,53 +531,98 @@ export default function InterviewRoomClient() {
     }
   }, [isCameraOn]);
 
-  // ── AI response ──
+  // ── Speak helper — speaks text as persona[speakerIdx] ──
+  // Defined BEFORE handleUserMessage so the closure captures the real function reference.
+  const speakAs = useCallback((speakerIdx: number, text: string) => {
+    speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    // Must be set BEFORE startLipSync so the boundary handler can be attached to it
+    (window as unknown as Record<string, unknown>).__currentUtterance = utter;
+    startLipSync(speakerIdx, text);
+    // Small defer so cancel() has fully flushed before enqueueing the new utterance
+    setTimeout(() => speechSynthesis.speak(utter), 50);
+  }, [startLipSync]);
+
+  // ── Handle candidate message — Gemini decides next speaker + generates response ──
   const handleUserMessage = useCallback(async (userText: string) => {
     if (!userText.trim()) return;
     setError(null);
+    setIsThinking(true);
 
     const apiKey = getApiKey();
     if (!apiKey) {
       setError("Please configure your Gemini API key in Settings first.");
+      setIsThinking(false);
       return;
     }
 
-    const updated: Message[] = [...messages, { role: "user", content: userText }];
-    setMessages(updated);
+    const updatedMessages: Message[] = [...messages, { role: "user", speakerIndex: -1, content: userText }];
+    setMessages(updatedMessages);
     setTranscriptLines((t) => [...t, `You: ${userText}`]);
 
-    const nextSpeaker = (activeSpeaker + 1) % Math.min(personas.length, 3);
+    const interviewerCount = Math.min(personas.length, 3);
+    const resumeContext = config.resumeText
+      ? `\nCandidate resume context: ${config.resumeText.slice(0, 800)}`
+      : "";
 
-    // Build compact conversation history (last 6 turns only)
-    const history = updated.slice(-6)
-      .map((m) => `${m.role === "user" ? "Candidate" : "Interviewer"}: ${m.content}`)
+    const personaDescriptions = personas.slice(0, interviewerCount).map((p, i) =>
+      `Interviewer ${i} — ${p.name} (${p.role}): ${p.style}`
+    ).join("\n");
+
+    const history = updatedMessages.slice(-8)
+      .map((m) => {
+        if (m.role === "user") return `Candidate: ${m.content}`;
+        const p = personas[m.speakerIndex];
+        return `${p?.name ?? "Interviewer"} (${p?.role ?? ""}): ${m.content}`;
+      })
       .join("\n");
 
-    // Use interview-type specific prompt
-    const interviewType = config.type in INTERVIEW_CONFIGS ? config.type : "technical";
-    const prompt = INTERVIEW_CONFIGS[interviewType].systemPrompt(config.role, history);
+    const prompt = `You are coordinating a ${config.type} interview panel for the role of "${config.role || "Software Engineer"}".${resumeContext}
 
-    let aiText = "";
+The interview panel consists of:
+${personaDescriptions}
+
+Conversation so far:
+${history}
+
+Based on the candidate's last response and the interview flow, decide:
+1. Which interviewer should speak next (choose the one whose expertise is most relevant to follow up)
+2. What that interviewer should say — one follow-up question or comment in their specific style
+
+Rules:
+- Pick the interviewer whose ROLE is most relevant to the candidate's answer
+- If the candidate mentioned technical details → prefer the technical interviewer
+- If the candidate mentioned teamwork/culture → prefer the HR interviewer  
+- If the candidate mentioned product/strategy → prefer the product/engineering manager
+- Ask ONE focused question, 2-3 sentences max
+- Do NOT repeat previous questions
+- Stay in character as the chosen interviewer
+
+Respond ONLY in this JSON format (no markdown, no code blocks):
+{
+  "speakerIndex": <0, 1, or 2>,
+  "response": "The interviewer's spoken response here"
+}`;
+
     try {
-      aiText = await generateWithRetry(prompt);
-    } catch (err: any) {
-      setError(`AI error: ${err.message}`);
-      return;
+      let text = (await generateWithFallback(prompt)).trim();
+      text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+      const data = JSON.parse(text) as { speakerIndex: number; response: string };
+
+      const nextIdx = Math.max(0, Math.min(data.speakerIndex, interviewerCount - 1));
+      const aiText = data.response || "Could you elaborate on that?";
+      const speaker = personas[nextIdx];
+
+      setIsThinking(false);
+      speakAs(nextIdx, aiText);
+      setMessages([...updatedMessages, { role: "assistant", speakerIndex: nextIdx, content: aiText }]);
+      setTranscriptLines((t) => [...t, `${speaker.name}: ${aiText}`]);
+    } catch (err: unknown) {
+      setIsThinking(false);
+      const message = err instanceof Error ? err.message : "AI error";
+      setError(message);
     }
-
-    // Strip any accidental preamble like "Interviewer:" prefix the model may add
-    aiText = aiText.replace(/^(Interviewer|AI|Assistant):\s*/i, "").trim();
-
-    speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(aiText);
-    (window as any).__currentUtterance = utter;
-    speechSynthesis.speak(utter);
-    speak(aiText);
-    startLipSync(nextSpeaker, aiText);
-    setActiveSpeaker(nextSpeaker);
-    setMessages([...updated, { role: "assistant", content: aiText }]);
-    setTranscriptLines((t) => [...t, `Interviewer: ${aiText}`]);
-  }, [messages, activeSpeaker, config, personas, speak, startLipSync]);
+  }, [messages, config, personas, speakAs]);
 
   const handleMic = useCallback(() => {
     if (!isRecording) {
@@ -589,7 +648,6 @@ export default function InterviewRoomClient() {
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
   const interviewerCount = Math.min(personas.length, 3);
-  const interviewLabel = INTERVIEW_CONFIGS[config.type]?.label ?? config.type;
 
   return (
     <>
@@ -616,6 +674,10 @@ export default function InterviewRoomClient() {
           from { opacity:0; transform:translateY(5px); }
           to   { opacity:1; transform:translateY(0); }
         }
+        @keyframes thinkPulse {
+          0%,100% { opacity:0.3; }
+          50% { opacity:1; }
+        }
       `}</style>
 
       <div style={{
@@ -625,35 +687,56 @@ export default function InterviewRoomClient() {
       }}>
 
         {/* ══ LEFT: Avatars + user cam ══ */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "16px", gap: "12px", minWidth: 0 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "16px 16px 80px", gap: "12px", minWidth: 0, overflow: "hidden" }}>
 
           {/* Top bar */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 2px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#52c4ff", boxShadow: "0 0 8px #52c4ff" }} />
               <span className="mono" style={{ color: "rgba(255,255,255,0.45)", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase" }}>Live Interview</span>
+              {isThinking && (
+                <span className="mono" style={{ fontSize: "10px", color: "#52c4ff", animation: "thinkPulse 1s ease infinite" }}>
+                  ··· thinking
+                </span>
+              )}
             </div>
             <div className="mono" style={{ display: "flex", gap: "20px", fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>
-              <span>{config.role || "Software Engineer"} · {interviewLabel}</span>
+              <span>{config.role || "Software Engineer"} · {config.type}</span>
               <span style={{ color: elapsed > config.duration * 60 * 0.8 ? "#fb923c" : "#52c4ff" }}>
                 {fmt(elapsed)} / {String(config.duration).padStart(2, "0")}:00
               </span>
             </div>
           </div>
 
-          {/* Avatar grid */}
+          {/* Avatar grid
+              1 interviewer  → 1 col stacked vertically, centered, wider  (interviewer on top, user below)
+              2 interviewers → 2 cols × 2 rows (3 tiles)
+              3 interviewers → 2 cols × 2 rows (4 tiles)
+          */}
           <div style={{
-            flex: 1, display: "grid", gap: "12px",
+            flex: 1,
+            display: "grid",
+            gap: "12px",
+            minHeight: 0,
+            overflow: "hidden",
+            // 1 interviewer: single column, constrained width, centered
+            // 2/3 interviewers: two columns, slightly inset so tiles aren't edge-to-edge
+            // Change gridTemplateColumns and maxWidth logic
             gridTemplateColumns: interviewerCount === 1 ? "1fr" : "1fr 1fr",
-            gridTemplateRows: interviewerCount <= 2 ? "1fr" : "1fr 1fr",
+            gridTemplateRows: "1fr 1fr",
+            maxWidth: interviewerCount === 1 ? "480px" : "80%", // Increased from 460px, decreased from 92%
+            width: "100%",
+            margin: "0 auto", // Center it for all modes
+            alignSelf: "stretch",
           }}>
             {personas.slice(0, interviewerCount).map((p, i) => (
               <AvatarTile
                 key={p.id}
                 name={p.name}
-                title={p.role || "Interviewer"}
+                title={p.role}
                 signal={signalRefs.current[i]}
                 speaking={isSpeaking && activeSpeaker === i}
+                modelIndex={i}
               />
             ))}
 
@@ -663,7 +746,7 @@ export default function InterviewRoomClient() {
               background: "linear-gradient(145deg, #0e1520 0%, #131c2b 100%)",
               border: "1.5px solid rgba(255,255,255,0.07)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              minHeight: "200px",
+              
             }}>
               <video
                 ref={videoRef}
@@ -732,7 +815,8 @@ export default function InterviewRoomClient() {
 
           <div ref={transcriptRef} style={{ flex: 1, overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
             {transcriptLines.map((line, i) => {
-              const isAI = line.startsWith("Interviewer:");
+              const isAI = !line.startsWith("You:");
+              const speakerName = isAI ? line.split(":")[0] : "You";
               return (
                 <div key={i} style={{
                   padding: "10px 12px", borderRadius: "10px", fontSize: "12px", lineHeight: "1.55",
@@ -742,25 +826,46 @@ export default function InterviewRoomClient() {
                   animation: "fadeUp 0.25s ease",
                 }}>
                   <div className="mono" style={{ fontSize: "9px", fontWeight: 500, letterSpacing: "0.1em", color: isAI ? "#52c4ff" : "rgba(255,255,255,0.28)", marginBottom: "4px", textTransform: "uppercase" }}>
-                    {isAI ? "Interviewer" : "You"}
+                    {speakerName}
                   </div>
-                  {line.replace(/^(Interviewer|You): /, "")}
+                  {line.replace(/^[^:]+: /, "")}
                 </div>
               );
             })}
+            {isThinking && (
+              <div style={{
+                padding: "10px 12px", borderRadius: "10px", fontSize: "12px",
+                background: "rgba(82,196,255,0.04)",
+                borderLeft: "2px solid rgba(82,196,255,0.2)",
+                animation: "thinkPulse 1s ease infinite",
+              }}>
+                <div className="mono" style={{ fontSize: "9px", color: "#52c4ff", marginBottom: "4px" }}>INTERVIEWER</div>
+                <span style={{ color: "rgba(255,255,255,0.3)" }}>···</span>
+              </div>
+            )}
           </div>
 
           <div style={{ padding: "12px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: "8px" }}>
-            <input
+            <textarea
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && textInput.trim()) { handleUserMessage(textInput); setTextInput(""); } }}
-              placeholder="Type a response..."
-              style={{ flex: 1, padding: "9px 12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.85)", outline: "none", fontFamily: "'Syne', sans-serif" }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.shiftKey && textInput.trim() && !isThinking) {
+                  e.preventDefault();
+                  handleUserMessage(textInput);
+                  setTextInput("");
+                }
+                // plain Enter = new line (default textarea behavior)
+              }}
+              placeholder={"Type a response...\nShift+Enter to send"}
+              disabled={isThinking}
+              rows={2}
+              style={{ flex: 1, padding: "9px 12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.85)", outline: "none", fontFamily: "'Syne', sans-serif", opacity: isThinking ? 0.5 : 1, resize: "none", lineHeight: "1.5" }}
             />
             <button
-              onClick={() => { if (textInput.trim()) { handleUserMessage(textInput); setTextInput(""); } }}
-              style={{ padding: "9px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: 600, background: "rgba(82,196,255,0.12)", color: "#52c4ff", border: "1px solid rgba(82,196,255,0.25)", cursor: "pointer", fontFamily: "'Syne', sans-serif" }}
+              onClick={() => { if (textInput.trim() && !isThinking) { handleUserMessage(textInput); setTextInput(""); } }}
+              disabled={isThinking}
+              style={{ padding: "9px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: 600, background: "rgba(82,196,255,0.12)", color: "#52c4ff", border: "1px solid rgba(82,196,255,0.25)", cursor: isThinking ? "not-allowed" : "pointer", fontFamily: "'Syne', sans-serif", opacity: isThinking ? 0.5 : 1 }}
             >Send</button>
           </div>
         </div>
@@ -774,13 +879,14 @@ export default function InterviewRoomClient() {
           border: "1px solid rgba(255,255,255,0.07)",
           boxShadow: "0 8px 48px rgba(0,0,0,0.65)",
         }}>
-          <button onClick={handleMic} title={isRecording ? "Stop" : "Speak"} style={{
+          <button onClick={handleMic} title={isRecording ? "Stop" : "Speak"} disabled={isThinking} style={{
             width: "50px", height: "50px", borderRadius: "50%", fontSize: "18px",
             display: "flex", alignItems: "center", justifyContent: "center",
             background: isRecording ? "rgba(239,68,68,0.18)" : "rgba(255,255,255,0.06)",
             border: `1.5px solid ${isRecording ? "rgba(239,68,68,0.55)" : "rgba(255,255,255,0.1)"}`,
-            cursor: "pointer", transition: "all 0.2s",
+            cursor: isThinking ? "not-allowed" : "pointer", transition: "all 0.2s",
             animation: isRecording ? "recPulse 1s ease infinite" : "none",
+            opacity: isThinking ? 0.5 : 1,
           }}>🎤</button>
 
           <button onClick={toggleCamera} title={isCameraOn ? "Camera off" : "Camera on"} style={{
