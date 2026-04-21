@@ -163,7 +163,7 @@ export default function HomePage() {
                     <Sparkles className="h-4 w-4 text-white" />
                   </div>
                   <h3 className="text-sm font-semibold text-foreground group-hover:text-amber-400 transition-colors">
-                    AI Enhance
+                    AI Enhancer
                   </h3>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">
@@ -267,7 +267,7 @@ export default function HomePage() {
                     <FolderSearch className="h-4 w-4 text-white" />
                   </div>
                   <h3 className="text-sm font-semibold text-foreground group-hover:text-fuchsia-400 transition-colors">
-                    Project Analyser
+                    Project Analyse
                   </h3>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3"> {/* Added mb-3 for spacing */}
