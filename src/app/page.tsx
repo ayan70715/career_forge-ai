@@ -270,11 +270,11 @@ export default function HomePage() {
                     Project Analyser
                   </h3>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground mb-3"> {/* Added mb-3 for spacing */}
                   AI-powered analysis of strength and uniqueness of your projects
                 </p>
-                </div>
-                   <ProjectAnalysePreview />
+                <div className="flex-1"> {/* Wrapped preview in flex-1 to match others */}
+                  <ProjectAnalysePreview />
                 </div>
               </div>
             </BentoCard>
