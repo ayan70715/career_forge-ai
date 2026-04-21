@@ -27,6 +27,7 @@ import {
   ResumeVerifierPreview,
   CVPreview,
   InterviewPreview,
+  ProjectAnalysePreview,
   JobAnalysePreview,
 } from "@/components/home/FeaturePreview";
 
