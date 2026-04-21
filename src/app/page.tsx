@@ -15,6 +15,7 @@ import {
   BarChart3,
   Shield,
   FolderSearch,
+  Briefcase,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BentoGrid } from "@/components/home/BentoGrid";
@@ -26,6 +27,7 @@ import {
   ResumeVerifierPreview,
   CVPreview,
   InterviewPreview,
+  JobAnalysePreview,
 } from "@/components/home/FeaturePreview";
 
 const fadeUp = {
@@ -103,13 +105,13 @@ export default function HomePage() {
         │  (col-span-2,       ├──────────┤
         │   row-span-2)       │ ATS      │  row 2
         │                     │ Checker  │
-        ├──────────┬──────────┴──────────┤
+        ├──────────┬──────────┼──────────┤
         │ Project  │ Resume   │ CV /     │  row 3
         │ Analyser │ Verifier │ Cover    │
-        ├──────────┴──────────┬──────────┤
-        │ Interview Prep      │ Stat     │  row 4
-        │ (col-span-2)        │ Card     │
-        └─────────────────────┴──────────┘
+        ├──────────┼──────────┼──────────┤
+        │ Job      │ Interview│ Stat     │  row 4
+        │ Analyse  │ Prep     │ Card     │
+        └──────────┴──────────┴──────────┘
       */}
       <motion.section
         initial="hidden"
@@ -284,40 +286,59 @@ export default function HomePage() {
             </BentoCard>
           </motion.div>
 
-          {/* ── Row 4: Interview Prep — 2-col (mirrors Resume Builder width) ── */}
+          {/* ── Row 4: Job Analyse ── */}
           <motion.div
             variants={fadeUp}
             transition={{ duration: 0.5 }}
-            className="sm:col-span-2 lg:col-span-2 lg:col-start-1 lg:row-start-4"
+            className="lg:col-start-1 lg:row-start-4"
+          >
+            <BentoCard href="/job-analyse" className="h-full">
+              <div className="p-5 h-full flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-lime-500 to-green-600 shadow-[0_0_15px_rgba(132,204,22,0.2)]">
+                    <Briefcase className="h-4 w-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground group-hover:text-lime-400 transition-colors">
+                    Job Analyse
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Match your profile against job descriptions with AI precision
+                </p>
+                <div className="flex-1">
+                  <JobAnalysePreview />
+                </div>
+              </div>
+            </BentoCard>
+          </motion.div>
+
+          {/* ── Row 4: Interview Prep ── */}
+          <motion.div
+            variants={fadeUp}
+            transition={{ duration: 0.5 }}
+            className="lg:col-start-2 lg:row-start-4"
           >
             <BentoCard href="/interview-prep" className="h-full">
-              <div className="p-5 h-full flex flex-col sm:flex-row sm:items-center sm:gap-6">
-                <div className="flex-shrink-0 mb-3 sm:mb-0">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-rose-500 to-pink-600 shadow-[0_0_15px_rgba(244,63,94,0.2)]">
-                      <Mic className="h-4 w-4 text-white" />
-                    </div>
-                    <h3 className="text-sm font-semibold text-foreground group-hover:text-rose-400 transition-colors">
-                      Interview Prep
-                    </h3>
+              <div className="p-5 h-full flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-rose-500 to-pink-600 shadow-[0_0_15px_rgba(244,63,94,0.2)]">
+                    <Mic className="h-4 w-4 text-white" />
                   </div>
-                  <p className="text-xs text-muted-foreground max-w-xs">
-                    Live AI interview with voice interaction — practice answers,
-                    get real-time feedback, and build confidence before the big
-                    day.
-                  </p>
-                  <div className="mt-3 flex items-center gap-1 text-xs text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                    Start practicing <ArrowRight className="h-3 w-3" />
-                  </div>
+                  <h3 className="text-sm font-semibold text-foreground group-hover:text-rose-400 transition-colors">
+                    Interview Prep
+                  </h3>
                 </div>
-                <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground mb-3">
+                  Live AI interview with voice interaction
+                </p>
+                <div className="flex-1">
                   <InterviewPreview />
                 </div>
               </div>
             </BentoCard>
           </motion.div>
 
-          {/* ── Row 4: Stat card — col 3 ── */}
+          {/* ── Row 4: Stat card ── */}
           <motion.div
             variants={fadeUp}
             transition={{ duration: 0.5 }}
@@ -325,7 +346,7 @@ export default function HomePage() {
           >
             <div className="h-full rounded-2xl border border-glass-border bg-glass-bg backdrop-blur-md p-5 flex flex-col items-center justify-center text-center">
               <Cpu className="h-8 w-8 text-primary mb-3 opacity-60" />
-              <div className="text-3xl font-bold text-foreground mb-1">7</div>
+              <div className="text-3xl font-bold text-foreground mb-1">8</div>
               <div className="text-sm text-muted-foreground">
                 AI-Powered Tools
               </div>
