@@ -527,7 +527,7 @@ You are opening a ${config.type} interview for the role of "${config.role || "So
 Generate a natural, professional opening statement and first question appropriate for your role and style.
 Keep it to 2-3 sentences. Be specific to the role and interview type. Do NOT say "certainly" or "sure".
 
-IMPORTANT: The first question MUST be a short-answer theoretical/conceptual question (e.g. "What is X?", "Can you explain Y?", "How does Z work?"). Do NOT ask a coding question as the opener.
+IMPORTANT: The first question MUST be simple and easy — a basic conceptual question the candidate can answer confidently to warm up (e.g. "What is X?", "Can you explain Y in simple terms?"). Do NOT ask a complex or coding question as the opener.
 
 Respond with just the spoken text, nothing else.`;
 
@@ -601,6 +601,7 @@ Rules:
 - Do NOT repeat previous questions
 - Stay in character as the chosen interviewer
 - Question type: mostly short-answer theoretical/conceptual (definitions, trade-offs, how things work). Only ask a live coding question occasionally (~1 in 5). Prefer descriptive over "write code now".
+- Difficulty progression: start easy (basic definitions, simple concepts), gradually increase depth as the conversation progresses. Look at how many exchanges have happened — early on stay surface-level, later rounds can probe deeper or explore edge cases.
 
 Respond ONLY in this JSON format (no markdown, no code blocks):
 {
