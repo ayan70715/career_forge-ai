@@ -273,7 +273,7 @@ export default function HomePage() {
                   AI-powered analysis of strength and uniqueness of your projects
                 </p>
                 </div>
-                   <JobAnalysePreview />
+                   <ProjectAnalysePreview />
                 </div>
               </div>
             </BentoCard>
