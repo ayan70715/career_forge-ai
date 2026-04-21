@@ -215,7 +215,7 @@ export default function HomePage() {
                     <Mail className="h-4 w-4 text-white" />
                   </div>
                   <h3 className="text-sm font-semibold text-foreground group-hover:text-cyan-400 transition-colors">
-                    CV / Cover Letter
+                    CV / Cover Letter Generator
                   </h3>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">
