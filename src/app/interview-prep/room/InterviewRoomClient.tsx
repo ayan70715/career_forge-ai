@@ -479,6 +479,42 @@ export default function InterviewRoomClient() {
     tick();
   }, []);
 
+  // ── Generate opening question from Gemini once personas are ready ──
+  useEffect(() => {
+    if (!personasReady || interviewStarted.current) return;
+    interviewStarted.current = true;
+
+    const firstPersona = personas[0];
+    const resumeContext = config.resumeText
+      ? `\n\nCandidate's resume for context:\n${config.resumeText.slice(0, 1500)}`
+      : "";
+
+    const prompt = `You are ${firstPersona.name}, a ${firstPersona.role}.
+Your interviewing style: ${firstPersona.style}
+You are opening a ${config.type} interview for the role of "${config.role || "Software Engineer"}".${resumeContext}
+
+Generate a natural, professional opening statement and first question appropriate for your role and style.
+Keep it to 2-3 sentences. Be specific to the role and interview type. Do NOT say "certainly" or "sure".
+
+IMPORTANT: The first question MUST be a short-answer theoretical/conceptual question (e.g. "What is X?", "Can you explain Y?", "How does Z work?"). Do NOT ask a coding question as the opener.
+
+Respond with just the spoken text, nothing else.`;
+
+    generateWithFallback(prompt)
+      .then((openingText) => {
+        speakAs(0, openingText);
+        setMessages([{ role: "assistant", speakerIndex: 0, content: openingText }]);
+        setTranscriptLines([`${firstPersona.name}: ${openingText}`]);
+      })
+      .catch(() => {
+        // Fallback opening if Gemini fails
+        const fallback = `Hi, welcome to your ${config.type} interview for the ${config.role || "Software Engineer"} role. Let's start — can you briefly introduce yourself?`;
+        speakAs(0, fallback);
+        setMessages([{ role: "assistant", speakerIndex: 0, content: fallback }]);
+        setTranscriptLines([`${firstPersona.name}: ${fallback}`]);
+      });
+  }, [personasReady, personas, config, speakAs]);
+
   // ── Camera toggle ──
   const toggleCamera = useCallback(async () => {
     if (!isCameraOn) {
@@ -498,7 +534,8 @@ export default function InterviewRoomClient() {
   }, [isCameraOn]);
 
   // ── Speak helper — speaks text as persona[speakerIdx] ──
-  // Defined BEFORE handleUserMessage so the closure captures the real function reference.
+  // Only uses speechSynthesis directly — the useTextToSpeech speak() call was removed
+  // because it queued a second competing utterance that broke boundary events.
   const speakAs = useCallback((speakerIdx: number, text: string) => {
     speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
@@ -508,40 +545,6 @@ export default function InterviewRoomClient() {
     // Small defer so cancel() has fully flushed before enqueueing the new utterance
     setTimeout(() => speechSynthesis.speak(utter), 50);
   }, [startLipSync]);
-
-  // ── Generate opening question from Gemini once personas are ready ──
-  useEffect(() => {
-    if (!personasReady || interviewStarted.current) return;
-    interviewStarted.current = true;
-
-    const firstPersona = personas[0];
-    const resumeContext = config.resumeText
-      ? `\n\nCandidate's resume for context:\n${config.resumeText.slice(0, 1500)}`
-      : "";
-
-    const prompt = `You are ${firstPersona.name}, a ${firstPersona.role}.
-Your interviewing style: ${firstPersona.style}
-You are opening a ${config.type} interview for the role of "${config.role || "Software Engineer"}".${resumeContext}
-
-Generate a natural, professional opening statement and first question appropriate for your role and style.
-Keep it to 2-3 sentences. Be specific to the role and interview type. Do NOT say "certainly" or "sure".
-
-Respond with just the spoken text, nothing else.`;
-
-    generateWithFallback(prompt)
-      .then((openingText) => {
-        speakAs(0, openingText);
-        setMessages([{ role: "assistant", speakerIndex: 0, content: openingText }]);
-        setTranscriptLines([`${firstPersona.name}: ${openingText}`]);
-      })
-      .catch(() => {
-        // Fallback opening if Gemini fails
-        const fallback = `Hi, welcome to your ${config.type} interview for the ${config.role || "Software Engineer"} role. Let's start — can you briefly introduce yourself?`;
-        speakAs(0, fallback);
-        setMessages([{ role: "assistant", speakerIndex: 0, content: fallback }]);
-        setTranscriptLines([`${firstPersona.name}: ${fallback}`]);
-      });
-  }, [personasReady, personas, config, speakAs]);
 
   // ── Handle candidate message — Gemini decides next speaker + generates response ──
   const handleUserMessage = useCallback(async (userText: string) => {
@@ -597,6 +600,7 @@ Rules:
 - Ask ONE focused question, 2-3 sentences max
 - Do NOT repeat previous questions
 - Stay in character as the chosen interviewer
+- Question type: mostly short-answer theoretical/conceptual (definitions, trade-offs, how things work). Only ask a live coding question occasionally (~1 in 5). Prefer descriptive over "write code now".
 
 Respond ONLY in this JSON format (no markdown, no code blocks):
 {
