@@ -580,6 +580,9 @@ Respond with just the spoken text, nothing else.`;
       })
       .join("\n");
 
+    const lastSpeakerIdx = updatedMessages.filter(m => m.role === "assistant").slice(-1)[0]?.speakerIndex ?? -1;
+    const nextInRotation = (lastSpeakerIdx + 1) % interviewerCount;
+
     const prompt = `You are coordinating a ${config.type} interview panel for the role of "${config.role || "Software Engineer"}".${resumeContext}
 
 The interview panel consists of:
@@ -588,15 +591,16 @@ ${personaDescriptions}
 Conversation so far:
 ${history}
 
-Based on the candidate's last response and the interview flow, decide:
-1. Which interviewer should speak next (choose the one whose expertise is most relevant to follow up)
-2. What that interviewer should say — one follow-up question or comment in their specific style
+The last interviewer who spoke was index ${lastSpeakerIdx}. The next interviewer in rotation is index ${nextInRotation}.
+
+Your task:
+1. DEFAULT: Follow round-robin rotation — the next speaker should be index ${nextInRotation}.
+2. EXCEPTION: Override rotation ONLY if the candidate's answer strongly demands a specific interviewer's expertise. This should happen at most 1 in 4 turns.
+3. Generate what that interviewer should say — one question in their specific style.
 
 Rules:
-- Pick the interviewer whose ROLE is most relevant to the candidate's answer
-- If the candidate mentioned technical details → prefer the technical interviewer
-- If the candidate mentioned teamwork/culture → prefer the HR interviewer  
-- If the candidate mentioned product/strategy → prefer the product/engineering manager
+- Follow round-robin by default — interviewers should take turns evenly
+- Only skip rotation if there is a compelling topical reason
 - Ask ONE focused question, 2-3 sentences max
 - Do NOT repeat previous questions
 - Stay in character as the chosen interviewer
