@@ -64,14 +64,14 @@ function CircularGauge({ score, animating }: { score: number; animating: boolean
   return (
     <div style={{ position: "relative", width: "180px", height: "180px" }}>
       <svg width="180" height="180" style={{ transform: "rotate(-90deg)" }}>
-        <circle cx="90" cy="90" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
+        <circle cx="90" cy="90" r={r} fill="none" stroke="var(--ja-gauge-track)" strokeWidth="10" />
         <circle cx="90" cy="90" r={r} fill="none" stroke={color} strokeWidth="10"
           strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset}
           style={{ transition: "stroke-dashoffset 0.02s linear, stroke 0.5s ease" }} />
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <span style={{ fontSize: "36px", fontWeight: 700, color, fontFamily: "'Syne', sans-serif", lineHeight: 1 }}>{displayed}</span>
-        <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginTop: "2px", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.08em" }}>MATCH</span>
+        <span style={{ fontSize: "11px", color: "var(--ja-text-dim)", marginTop: "2px", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.08em" }}>MATCH</span>
       </div>
     </div>
   );
@@ -101,17 +101,17 @@ function SalarySlider({ min, max, userVal, animating }: { min: number; max: numb
   return (
     <div style={{ width: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono', monospace" }}>₹{min}L</span>
+        <span style={{ fontSize: "12px", color: "var(--ja-text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>₹{min}L</span>
         <span style={{ fontSize: "13px", fontWeight: 700, color, fontFamily: "'Syne', sans-serif" }}>₹{userVal}L estimated</span>
-        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono', monospace" }}>₹{max}L</span>
+        <span style={{ fontSize: "12px", color: "var(--ja-text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>₹{max}L</span>
       </div>
-      <div style={{ position: "relative", height: "8px", borderRadius: "4px", background: "rgba(255,255,255,0.07)" }}>
+      <div style={{ position: "relative", height: "8px", borderRadius: "4px", background: "var(--ja-slider-track)" }}>
         <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pos}%`, borderRadius: "4px", background: `linear-gradient(90deg, #3b82f6 0%, ${color} 100%)`, transition: "width 0.02s linear" }} />
-        <div style={{ position: "absolute", top: "50%", left: `${pos}%`, transform: "translate(-50%, -50%)", width: "18px", height: "18px", borderRadius: "50%", background: color, border: "3px solid #0a0f1a", boxShadow: `0 0 12px ${color}`, transition: "left 0.02s linear, background 0.5s ease" }} />
+        <div style={{ position: "absolute", top: "50%", left: `${pos}%`, transform: "translate(-50%, -50%)", width: "18px", height: "18px", borderRadius: "50%", background: color, border: "3px solid var(--ja-slider-dot-border)", boxShadow: `0 0 12px ${color}`, transition: "left 0.02s linear, background 0.5s ease" }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px" }}>
-        <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono', monospace" }}>Entry</span>
-        <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono', monospace" }}>Senior</span>
+        <span style={{ fontSize: "10px", color: "var(--ja-text-faint)", fontFamily: "'JetBrains Mono', monospace" }}>Entry</span>
+        <span style={{ fontSize: "10px", color: "var(--ja-text-faint)", fontFamily: "'JetBrains Mono', monospace" }}>Senior</span>
       </div>
     </div>
   );
@@ -356,7 +356,89 @@ Return ONLY the JSON object, nothing else, no markdown.
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
         textarea { resize: none; }
-        textarea::placeholder, input::placeholder { color: rgba(255,255,255,0.2); }
+
+        :root {
+          --ja-bg: radial-gradient(ellipse at 10% 0%, #0d1f35 0%, #060a10 50%, #04060c 100%);
+          --ja-nav-bg: rgba(4,6,12,0.6);
+          --ja-nav-border: rgba(255,255,255,0.05);
+          --ja-text: #ffffff;
+          --ja-text-muted: rgba(255,255,255,0.45);
+          --ja-text-dim: rgba(255,255,255,0.35);
+          --ja-text-faint: rgba(255,255,255,0.25);
+          --ja-card-bg: rgba(255,255,255,0.03);
+          --ja-card-border: rgba(255,255,255,0.07);
+          --ja-input-bg: rgba(255,255,255,0.04);
+          --ja-input-border: rgba(255,255,255,0.08);
+          --ja-input-text: rgba(255,255,255,0.8);
+          --ja-input-border2: rgba(255,255,255,0.1);
+          --ja-chip-bg: rgba(255,255,255,0.05);
+          --ja-chip-border: rgba(255,255,255,0.08);
+          --ja-chip-text: rgba(255,255,255,0.5);
+          --ja-btn-bg: rgba(255,255,255,0.06);
+          --ja-btn-border: rgba(255,255,255,0.1);
+          --ja-btn-text: rgba(255,255,255,0.5);
+          --ja-gauge-track: rgba(255,255,255,0.06);
+          --ja-slider-track: rgba(255,255,255,0.07);
+          --ja-slider-dot-border: #0a0f1a;
+          --ja-salary-info-bg: rgba(99,210,255,0.06);
+          --ja-salary-info-border: rgba(99,210,255,0.15);
+          --ja-placeholder-color: rgba(255,255,255,0.2);
+        }
+        .dark {
+          --ja-bg: radial-gradient(ellipse at 10% 0%, #0d1f35 0%, #060a10 50%, #04060c 100%);
+          --ja-nav-bg: rgba(4,6,12,0.6);
+          --ja-nav-border: rgba(255,255,255,0.05);
+          --ja-text: #ffffff;
+          --ja-text-muted: rgba(255,255,255,0.45);
+          --ja-text-dim: rgba(255,255,255,0.35);
+          --ja-text-faint: rgba(255,255,255,0.25);
+          --ja-card-bg: rgba(255,255,255,0.03);
+          --ja-card-border: rgba(255,255,255,0.07);
+          --ja-input-bg: rgba(255,255,255,0.04);
+          --ja-input-border: rgba(255,255,255,0.08);
+          --ja-input-text: rgba(255,255,255,0.8);
+          --ja-input-border2: rgba(255,255,255,0.1);
+          --ja-chip-bg: rgba(255,255,255,0.05);
+          --ja-chip-border: rgba(255,255,255,0.08);
+          --ja-chip-text: rgba(255,255,255,0.5);
+          --ja-btn-bg: rgba(255,255,255,0.06);
+          --ja-btn-border: rgba(255,255,255,0.1);
+          --ja-btn-text: rgba(255,255,255,0.5);
+          --ja-gauge-track: rgba(255,255,255,0.06);
+          --ja-slider-track: rgba(255,255,255,0.07);
+          --ja-slider-dot-border: #0a0f1a;
+          --ja-salary-info-bg: rgba(99,210,255,0.06);
+          --ja-salary-info-border: rgba(99,210,255,0.15);
+          --ja-placeholder-color: rgba(255,255,255,0.2);
+        }
+        :root:not(.dark) {
+          --ja-bg: radial-gradient(ellipse at 10% 0%, #dff0ff 0%, #f0f6ff 50%, #f8fafc 100%);
+          --ja-nav-bg: rgba(248,250,252,0.85);
+          --ja-nav-border: rgba(0,0,0,0.08);
+          --ja-text: #0f172a;
+          --ja-text-muted: #475569;
+          --ja-text-dim: #64748b;
+          --ja-text-faint: #94a3b8;
+          --ja-card-bg: rgba(255,255,255,0.7);
+          --ja-card-border: rgba(0,0,0,0.08);
+          --ja-input-bg: rgba(255,255,255,0.8);
+          --ja-input-border: rgba(0,0,0,0.1);
+          --ja-input-text: #1e293b;
+          --ja-input-border2: rgba(0,0,0,0.12);
+          --ja-chip-bg: rgba(0,0,0,0.04);
+          --ja-chip-border: rgba(0,0,0,0.09);
+          --ja-chip-text: #475569;
+          --ja-btn-bg: rgba(0,0,0,0.05);
+          --ja-btn-border: rgba(0,0,0,0.1);
+          --ja-btn-text: #475569;
+          --ja-gauge-track: rgba(0,0,0,0.07);
+          --ja-slider-track: rgba(0,0,0,0.08);
+          --ja-slider-dot-border: #e2e8f0;
+          --ja-salary-info-bg: rgba(99,210,255,0.08);
+          --ja-salary-info-border: rgba(59,130,246,0.2);
+          --ja-placeholder-color: #94a3b8;
+        }
+        textarea::placeholder, input::placeholder { color: var(--ja-placeholder-color); }
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(16px); }
           to   { opacity: 1; transform: translateY(0); }
@@ -369,16 +451,16 @@ Return ONLY the JSON object, nothing else, no markdown.
         .btn-primary:active { transform: translateY(0); }
       `}</style>
 
-      <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 10% 0%, #0d1f35 0%, #060a10 50%, #04060c 100%)", color: "#fff", fontFamily: "'Syne', sans-serif" }}>
+      <div style={{ minHeight: "100vh", background: "var(--ja-bg)", color: "var(--ja-text)", fontFamily: "'Syne', sans-serif" }}>
 
         {/* ── NAV ── */}
-        <nav style={{ padding: "16px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(4,6,12,0.6)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50 }}>
+        <nav style={{ padding: "16px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--ja-nav-border)", background: "var(--ja-nav-bg)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "linear-gradient(135deg, #63d2ff 0%, #3b82f6 100%)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>⚡</div>
             <span style={{ fontWeight: 700, fontSize: "16px" }}>CareerForge</span>
             <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "20px", background: "rgba(99,210,255,0.1)", color: "#63d2ff", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.08em" }}>JOB ANALYSER</span>
           </div>
-          <button onClick={() => router.push("/")} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)", padding: "6px 14px", borderRadius: "8px", fontSize: "13px", cursor: "pointer", fontFamily: "'Syne', sans-serif" }}>← Back</button>
+          <button onClick={() => router.push("/")} style={{ background: "var(--ja-btn-bg)", border: "1px solid var(--ja-btn-border)", color: "var(--ja-btn-text)", padding: "6px 14px", borderRadius: "8px", fontSize: "13px", cursor: "pointer", fontFamily: "'Syne', sans-serif" }}>← Back</button>
         </nav>
 
         {/* ── INPUT STEP ── */}
@@ -394,7 +476,7 @@ Return ONLY the JSON object, nothing else, no markdown.
                   You Stand in the Market
                 </span>
               </h1>
-              <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "16px", maxWidth: "480px", margin: "0 auto" }}>
+              <p style={{ color: "var(--ja-text-muted)", fontSize: "16px", maxWidth: "480px", margin: "0 auto" }}>
                 Real-time salary data · AI gap analysis · Interview prep — in 30 seconds.
               </p>
             </div>
@@ -406,25 +488,25 @@ Return ONLY the JSON object, nothing else, no markdown.
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
 
               {/* Role + City */}
-              <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "16px", padding: "24px" }}>
+              <div style={{ background: "var(--ja-card-bg)", border: "1px solid var(--ja-card-border)", borderRadius: "16px", padding: "24px" }}>
                 <div style={{ fontSize: "11px", color: "#63d2ff", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", marginBottom: "16px" }}>TARGET ROLE</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "16px" }}>
                   {POPULAR_ROLES.map((r) => (
-                    <button key={r} className="hover-chip" onClick={() => setRole(r)} style={{ padding: "4px 10px", borderRadius: "20px", fontSize: "11px", cursor: "pointer", background: role === r ? "rgba(99,210,255,0.15)" : "rgba(255,255,255,0.05)", border: `1px solid ${role === r ? "rgba(99,210,255,0.4)" : "rgba(255,255,255,0.08)"}`, color: role === r ? "#63d2ff" : "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif", transition: "all 0.15s" }}>{r}</button>
+                    <button key={r} className="hover-chip" onClick={() => setRole(r)} style={{ padding: "4px 10px", borderRadius: "20px", fontSize: "11px", cursor: "pointer", background: role === r ? "rgba(99,210,255,0.15)" : "var(--ja-chip-bg)", border: `1px solid ${role === r ? "rgba(99,210,255,0.4)" : "var(--ja-chip-border)"}`, color: role === r ? "#63d2ff" : "var(--ja-chip-text)", fontFamily: "'Syne', sans-serif", transition: "all 0.15s" }}>{r}</button>
                   ))}
                 </div>
-                <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Or type a custom role..." style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", fontSize: "13px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", outline: "none", fontFamily: "'Syne', sans-serif", marginBottom: "16px" }} />
+                <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Or type a custom role..." style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", fontSize: "13px", background: "var(--ja-input-bg)", border: "1px solid var(--ja-input-border2)", color: "var(--ja-text)", outline: "none", fontFamily: "'Syne', sans-serif", marginBottom: "16px" }} />
                 <div style={{ fontSize: "11px", color: "#63d2ff", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", marginBottom: "10px" }}>CITY</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                   {INDIAN_CITIES.map((c) => (
-                    <button key={c} className="hover-chip" onClick={() => setCity(c)} style={{ padding: "4px 10px", borderRadius: "20px", fontSize: "11px", cursor: "pointer", background: city === c ? "rgba(99,210,255,0.15)" : "rgba(255,255,255,0.05)", border: `1px solid ${city === c ? "rgba(99,210,255,0.4)" : "rgba(255,255,255,0.08)"}`, color: city === c ? "#63d2ff" : "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif", transition: "all 0.15s" }}>{c}</button>
+                    <button key={c} className="hover-chip" onClick={() => setCity(c)} style={{ padding: "4px 10px", borderRadius: "20px", fontSize: "11px", cursor: "pointer", background: city === c ? "rgba(99,210,255,0.15)" : "var(--ja-chip-bg)", border: `1px solid ${city === c ? "rgba(99,210,255,0.4)" : "var(--ja-chip-border)"}`, color: city === c ? "#63d2ff" : "var(--ja-chip-text)", fontFamily: "'Syne', sans-serif", transition: "all 0.15s" }}>{c}</button>
                   ))}
                 </div>
               </div>
 
               {/* Resume + JD */}
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "16px", padding: "20px", flex: 1 }}>
+                <div style={{ background: "var(--ja-card-bg)", border: "1px solid var(--ja-card-border)", borderRadius: "16px", padding: "20px", flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
                     <div style={{ fontSize: "11px", color: "#63d2ff", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em" }}>YOUR RESUME *</div>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -441,11 +523,11 @@ Return ONLY the JSON object, nothing else, no markdown.
                       <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt" onChange={handleFileUpload} style={{ display: "none" }} />
                     </div>
                   </div>
-                  <textarea value={resume} onChange={(e) => { setResume(e.target.value); setResumeFileName(null); }} placeholder="Paste your resume text here — or upload a PDF/DOCX above..." rows={7} style={{ width: "100%", padding: "12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.8)", outline: "none", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.6 }} />
+                  <textarea value={resume} onChange={(e) => { setResume(e.target.value); setResumeFileName(null); }} placeholder="Paste your resume text here — or upload a PDF/DOCX above..." rows={7} style={{ width: "100%", padding: "12px", borderRadius: "10px", fontSize: "12px", background: "var(--ja-input-bg)", border: "1px solid var(--ja-input-border)", color: "var(--ja-input-text)", outline: "none", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.6 }} />
                 </div>
-                <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "16px", padding: "20px" }}>
-                  <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", marginBottom: "10px" }}>JOB DESCRIPTION (optional)</div>
-                  <textarea value={jd} onChange={(e) => setJd(e.target.value)} placeholder="Paste a specific job description for targeted analysis..." rows={4} style={{ width: "100%", padding: "12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.8)", outline: "none", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.6 }} />
+                <div style={{ background: "var(--ja-card-bg)", border: "1px solid var(--ja-card-border)", borderRadius: "16px", padding: "20px" }}>
+                  <div style={{ fontSize: "11px", color: "var(--ja-text-dim)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", marginBottom: "10px" }}>JOB DESCRIPTION (optional)</div>
+                  <textarea value={jd} onChange={(e) => setJd(e.target.value)} placeholder="Paste a specific job description for targeted analysis..." rows={4} style={{ width: "100%", padding: "12px", borderRadius: "10px", fontSize: "12px", background: "var(--ja-input-bg)", border: "1px solid var(--ja-input-border)", color: "var(--ja-input-text)", outline: "none", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.6 }} />
                 </div>
               </div>
             </div>
@@ -481,12 +563,12 @@ Return ONLY the JSON object, nothing else, no markdown.
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
                 <div>
                   <h2 style={{ fontSize: "24px", fontWeight: 800 }}>{result.roleTitle}</h2>
-                  <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "13px", fontFamily: "'JetBrains Mono', monospace", marginTop: "4px" }}>
+                  <p style={{ color: "var(--ja-text-dim)", fontSize: "13px", fontFamily: "'JetBrains Mono', monospace", marginTop: "4px" }}>
                     {result.city} · {result.totalJobs > 0 ? `${result.totalJobs.toLocaleString()} active listings analysed` : "Market analysis complete"}
                   </p>
                 </div>
                 <div style={{ display: "flex", gap: "10px" }}>
-                  <button onClick={() => setStep("input")} style={{ padding: "10px 18px", borderRadius: "10px", fontSize: "13px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontFamily: "'Syne', sans-serif" }}>← Re-analyse</button>
+                  <button onClick={() => setStep("input")} style={{ padding: "10px 18px", borderRadius: "10px", fontSize: "13px", background: "var(--ja-btn-bg)", border: "1px solid var(--ja-btn-border)", color: "var(--ja-btn-text)", cursor: "pointer", fontFamily: "'Syne', sans-serif" }}>← Re-analyse</button>
                   <button onClick={launchInterview} style={{ padding: "10px 20px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, background: "linear-gradient(135deg, #63d2ff 0%, #3b82f6 100%)", border: "none", color: "#060a10", cursor: "pointer", fontFamily: "'Syne', sans-serif" }}>🎯 Practice Interview</button>
                 </div>
               </div>
@@ -496,12 +578,12 @@ Return ONLY the JSON object, nothing else, no markdown.
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
 
               {/* Compatibility Score */}
-              <div className="card-in" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "16px", padding: "28px", animationDelay: "0s" }}>
+              <div className="card-in" style={{ background: "var(--ja-card-bg)", border: "1px solid var(--ja-card-border)", borderRadius: "16px", padding: "28px", animationDelay: "0s" }}>
                 <div style={{ fontSize: "11px", color: "#63d2ff", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", marginBottom: "20px" }}>COMPATIBILITY SCORE</div>
                 <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
                   <CircularGauge score={result.compatibilityScore} animating={animated} />
                   <div>
-                    <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", lineHeight: 1.6, marginBottom: "12px" }}>{result.summary}</p>
+                    <p style={{ fontSize: "13px", color: "var(--ja-text-muted)", lineHeight: 1.6, marginBottom: "12px" }}>{result.summary}</p>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                       {result.matchedSkills.slice(0, 5).map((s) => (
                         <span key={s} style={{ padding: "3px 9px", borderRadius: "20px", fontSize: "11px", background: "rgba(34,211,160,0.1)", color: "#22d3a0", border: "1px solid rgba(34,211,160,0.25)", fontFamily: "'JetBrains Mono', monospace" }}>✓ {s}</span>
@@ -512,11 +594,11 @@ Return ONLY the JSON object, nothing else, no markdown.
               </div>
 
               {/* Salary Benchmark */}
-              <div className="card-in" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "16px", padding: "28px", animationDelay: "0.1s" }}>
+              <div className="card-in" style={{ background: "var(--ja-card-bg)", border: "1px solid var(--ja-card-border)", borderRadius: "16px", padding: "28px", animationDelay: "0.1s" }}>
                 <div style={{ fontSize: "11px", color: "#63d2ff", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", marginBottom: "20px" }}>SALARY BENCHMARK · {result.city.toUpperCase()}</div>
                 <SalarySlider min={result.salaryMin} max={result.salaryMax} userVal={result.userSalaryEstimate} animating={animated} />
-                <div style={{ marginTop: "20px", padding: "12px 14px", borderRadius: "10px", background: "rgba(99,210,255,0.06)", border: "1px solid rgba(99,210,255,0.15)" }}>
-                  <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono', monospace" }}>
+                <div style={{ marginTop: "20px", padding: "12px 14px", borderRadius: "10px", background: "var(--ja-salary-info-bg)", border: "1px solid var(--ja-salary-info-border)" }}>
+                  <p style={{ fontSize: "12px", color: "var(--ja-text-muted)", fontFamily: "'JetBrains Mono', monospace" }}>
                     {result.totalJobs > 0 ? `Based on ${result.totalJobs.toLocaleString()} live listings on Adzuna India` : "Based on market benchmarks for this role"}
                   </p>
                 </div>
@@ -527,7 +609,7 @@ Return ONLY the JSON object, nothing else, no markdown.
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
 
               {/* Gap Alerts */}
-              <div className="card-in" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "16px", padding: "28px", animationDelay: "0.2s" }}>
+              <div className="card-in" style={{ background: "var(--ja-card-bg)", border: "1px solid var(--ja-card-border)", borderRadius: "16px", padding: "28px", animationDelay: "0.2s" }}>
                 <div style={{ fontSize: "11px", color: "#f43f5e", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", marginBottom: "20px" }}>⚠ CRITICAL GAP ALERTS</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   {result.missingSkills.map(({ skill, urgency }) => {
@@ -538,7 +620,7 @@ Return ONLY the JSON object, nothing else, no markdown.
                     }[urgency];
                     return (
                       <div key={skill} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "10px", background: colors.bg, border: `1px solid ${colors.border}` }}>
-                        <span style={{ fontSize: "13px", fontWeight: 600, color: "#fff" }}>{skill}</span>
+                        <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--ja-text)" }}>{skill}</span>
                         <span style={{ fontSize: "9px", padding: "2px 7px", borderRadius: "20px", background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em" }}>{colors.label}</span>
                       </div>
                     );
@@ -548,7 +630,7 @@ Return ONLY the JSON object, nothing else, no markdown.
               </div>
 
               {/* Cheat Sheet */}
-              <div className="card-in" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "16px", padding: "28px", animationDelay: "0.3s" }}>
+              <div className="card-in" style={{ background: "var(--ja-card-bg)", border: "1px solid var(--ja-card-border)", borderRadius: "16px", padding: "28px", animationDelay: "0.3s" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
                   <div style={{ fontSize: "11px", color: "#a78bfa", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em" }}>🎯 INTERVIEW CHEAT SHEET</div>
                   <button onClick={launchInterview} style={{ padding: "4px 12px", borderRadius: "20px", fontSize: "11px", background: "rgba(167,139,250,0.12)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)", cursor: "pointer", fontFamily: "'Syne', sans-serif" }}>Practice →</button>
@@ -556,8 +638,8 @@ Return ONLY the JSON object, nothing else, no markdown.
                 <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                   {result.cheatSheet.map((item, i) => (
                     <div key={i} style={{ padding: "14px", borderRadius: "12px", background: "rgba(167,139,250,0.05)", border: "1px solid rgba(167,139,250,0.15)" }}>
-                      <p style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.9)", marginBottom: "6px", lineHeight: 1.4 }}>Q{i + 1}. {item.question}</p>
-                      <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.5 }}>💡 {item.hint}</p>
+                      <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--ja-text)", marginBottom: "6px", lineHeight: 1.4 }}>Q{i + 1}. {item.question}</p>
+                      <p style={{ fontSize: "11px", color: "var(--ja-text-dim)", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.5 }}>💡 {item.hint}</p>
                     </div>
                   ))}
                 </div>
