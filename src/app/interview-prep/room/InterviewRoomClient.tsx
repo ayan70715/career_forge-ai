@@ -641,8 +641,7 @@ Your response:`;
 
     // Save raw interview data for report page
     localStorage.setItem("interviewRawData", JSON.stringify({
-      transcript: transcriptLines.join("
-"),
+      transcript: transcriptLines.join("\n"),
       config,
       elapsed,
     }));
