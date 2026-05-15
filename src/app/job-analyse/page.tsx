@@ -209,7 +209,7 @@ export default function JobAnalyserPage() {
       let salaryMin = 6, salaryMax = 24, totalJobs = 0, trendingSkills: string[] = [];
 
       try {
-        const adzunaRes = await fetch("/api/job-analyse/analyse", {
+        const adzunaRes = await fetch("/api/job-analyse/adzuna", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ role: targetRole, city: targetCity }),
@@ -245,7 +245,7 @@ ${jd ? jd.slice(0, 2000) : "Not provided — analyse against the role and city m
 TASK: Analyse the candidate's fit and return ONLY valid JSON (no markdown, no backticks, no code fences):
 {
   "compatibilityScore": <0-100 integer>,
-  "userSalaryEstimate": <integer in LPA within the ${salaryMin}–${salaryMax} range>,
+  "userSalaryEstimate": <integer in LPA (lakhs per annum) ONLY, must be between ${salaryMin} and ${salaryMax}, never raw rupees>,
   "matchedSkills": [<up to 8 skills EXPLICITLY found in the resume that match ${targetRole} demand>],
   "missingSkills": [
     { "skill": "<skill name>", "urgency": "critical" | "important" | "nice" }
@@ -312,11 +312,21 @@ Return ONLY the JSON object, nothing else, no markdown.
 
       clearInterval(msgInterval);
 
+      // Normalize userSalaryEstimate: Gemini sometimes returns raw rupees (e.g. 900000)
+      // instead of LPA (e.g. 9). Convert if the value is clearly not in LPA range.
+      let normalizedSalary: number = Number(geminiResult.userSalaryEstimate) || salaryMin;
+      if (normalizedSalary > 1000) {
+        // Likely raw rupees — convert to LPA (divide by 100000)
+        normalizedSalary = Math.round(normalizedSalary / 100000);
+      }
+      // Clamp strictly within the min–max band so the slider never overflows
+      normalizedSalary = Math.max(salaryMin, Math.min(salaryMax, normalizedSalary));
+
       setResult({
         compatibilityScore: geminiResult.compatibilityScore,
         salaryMin,
         salaryMax,
-        userSalaryEstimate: geminiResult.userSalaryEstimate,
+        userSalaryEstimate: normalizedSalary,
         matchedSkills: geminiResult.matchedSkills || [],
         missingSkills: geminiResult.missingSkills || [],
         cheatSheet: geminiResult.cheatSheet || [],
