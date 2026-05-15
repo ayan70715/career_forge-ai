@@ -246,7 +246,7 @@ function AvatarTile({
   return (
     <div style={{
       position: "relative", borderRadius: "16px", overflow: "hidden",
-      background: "linear-gradient(145deg, #0e1520 0%, #131c2b 100%)",
+      background: "var(--interview-surface)",
       border: speaking ? "1.5px solid rgba(82,196,255,0.7)" : "1.5px solid rgba(255,255,255,0.07)",
       boxShadow: speaking ? "0 0 20px rgba(82,196,255,0.2)" : "0 4px 24px rgba(0,0,0,0.4)",
       transition: "border 0.3s ease, box-shadow 0.3s ease",
@@ -650,15 +650,12 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
     stop();
     speechSynthesis.cancel();
     streamRef.current?.getTracks().forEach((t) => t.stop());
-
-    // Save raw interview data for report page
     localStorage.setItem("interviewRawData", JSON.stringify({
       transcript: transcriptLines.join("\n"),
       config,
       elapsed,
     }));
     localStorage.removeItem("interviewReport");
-
     router.push("/interview-prep/report");
   }, [stop, router, transcriptLines, config, elapsed]);
 
@@ -669,13 +666,39 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
 
   return (
     <>
+
+      {/* Theme-aware CSS variables for interview room */}
       <style>{`
+        :root {
+          --interview-bg: #f8fafc;
+          --interview-surface: #f1f5f9;
+          --interview-panel: rgba(248,250,252,0.85);
+          --interview-panel-solid: rgba(248,250,252,0.95);
+          --interview-border: rgba(0,0,0,0.1);
+          --interview-text: #0f172a;
+          --interview-text-muted: #334155;
+          --interview-text-dim: #64748b;
+          --interview-input-bg: #f1f5f9;
+          --interview-btn-bg: rgba(0,0,0,0.05);
+        }
+        .dark {
+          --interview-bg: radial-gradient(ellipse at 15% 15%, #0b1624 0%, #07090f 55%, #040508 100%);
+          --interview-surface: linear-gradient(145deg, #0e1520 0%, #131c2b 100%);
+          --interview-panel: rgba(5,8,14,0.7);
+          --interview-panel-solid: rgba(5,8,14,0.88);
+          --interview-border: rgba(255,255,255,0.07);
+          --interview-text: rgba(255,255,255,0.9);
+          --interview-text-muted: rgba(255,255,255,0.75);
+          --interview-text-dim: rgba(255,255,255,0.45);
+          --interview-input-bg: rgba(255,255,255,0.05);
+          --interview-btn-bg: rgba(255,255,255,0.06);
+        }
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Syne', sans-serif; }
         .mono { font-family: 'JetBrains Mono', monospace; }
         ::-webkit-scrollbar { width: 3px; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb { background: rgba(127,127,127,0.2); border-radius: 2px; }
         @keyframes speakRing {
           0%,100% { opacity:0.4; transform:scale(1); }
           50% { opacity:0.9; transform:scale(1.008); }
@@ -700,7 +723,7 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
 
       <div style={{
         height: "100vh", display: "flex", overflow: "hidden", color: "#fff",
-        background: "radial-gradient(ellipse at 15% 15%, #0b1624 0%, #07090f 55%, #040508 100%)",
+        background: "var(--interview-bg)",
         fontFamily: "'Syne', sans-serif",
       }}>
 
@@ -711,14 +734,14 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 2px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#52c4ff", boxShadow: "0 0 8px #52c4ff" }} />
-              <span className="mono" style={{ color: "rgba(255,255,255,0.45)", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase" }}>Live Interview</span>
+              <span className="mono" style={{ color: "var(--interview-text-dim)", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase" }}>Live Interview</span>
               {isThinking && (
                 <span className="mono" style={{ fontSize: "10px", color: "#52c4ff", animation: "thinkPulse 1s ease infinite" }}>
                   ··· thinking
                 </span>
               )}
             </div>
-            <div className="mono" style={{ display: "flex", gap: "20px", fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>
+            <div className="mono" style={{ display: "flex", gap: "20px", fontSize: "11px", color: "var(--interview-text-dim)" }}>
               <span>{config.role || "Software Engineer"} · {config.type}</span>
               <span style={{ color: elapsed > config.duration * 60 * 0.8 ? "#fb923c" : "#52c4ff" }}>
                 {fmt(elapsed)} / {String(config.duration).padStart(2, "0")}:00
@@ -761,7 +784,7 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
             {/* User tile */}
             <div style={{
               position: "relative", borderRadius: "16px", overflow: "hidden",
-              background: "linear-gradient(145deg, #0e1520 0%, #131c2b 100%)",
+              background: "var(--interview-surface)",
               border: "1.5px solid rgba(255,255,255,0.07)",
               display: "flex", alignItems: "center", justifyContent: "center",
               
@@ -814,12 +837,12 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
         {/* ══ RIGHT: Transcript panel ══ */}
         <div style={{
           width: "300px", display: "flex", flexDirection: "column",
-          borderLeft: "1px solid rgba(255,255,255,0.05)",
-          background: "rgba(5,8,14,0.7)",
+          borderLeft: "1px solid var(--interview-border)",
+          background: "var(--interview-panel)",
           backdropFilter: "blur(16px)",
         }}>
-          <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-            <span style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.75)" }}>Transcript</span>
+          <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--interview-border)" }}>
+            <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--interview-text)" }}>Transcript</span>
             <span className="mono" style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "20px", background: "rgba(82,196,255,0.1)", color: "#52c4ff" }}>
               {transcriptLines.length}
             </span>
@@ -863,7 +886,7 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
             )}
           </div>
 
-          <div style={{ padding: "12px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: "8px" }}>
+          <div style={{ padding: "12px", borderTop: "1px solid var(--interview-border)", display: "flex", gap: "8px" }}>
             <textarea
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
@@ -878,7 +901,7 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
               placeholder={"Type a response...\nShift+Enter to send"}
               disabled={isThinking}
               rows={2}
-              style={{ flex: 1, padding: "9px 12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.85)", outline: "none", fontFamily: "'Syne', sans-serif", opacity: isThinking ? 0.5 : 1, resize: "none", lineHeight: "1.5" }}
+              style={{ flex: 1, padding: "9px 12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--interview-text)", outline: "none", fontFamily: "'Syne', sans-serif", opacity: isThinking ? 0.5 : 1, resize: "none", lineHeight: "1.5" }}
             />
             <button
               onClick={() => { if (textInput.trim() && !isThinking) { handleUserMessage(textInput); setTextInput(""); } }}
@@ -893,8 +916,8 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
           position: "absolute", bottom: "20px", left: "50%", transform: "translateX(-50%)",
           display: "flex", alignItems: "center", gap: "10px",
           padding: "10px 18px", borderRadius: "18px", zIndex: 50,
-          background: "rgba(5,8,14,0.88)", backdropFilter: "blur(20px)",
-          border: "1px solid rgba(255,255,255,0.07)",
+          background: "var(--interview-panel-solid)", backdropFilter: "blur(20px)",
+          border: "1px solid var(--interview-border)",
           boxShadow: "0 8px 48px rgba(0,0,0,0.65)",
         }}>
           <button onClick={handleMic} title={isRecording ? "Stop" : "Speak"} disabled={isThinking} style={{
@@ -915,13 +938,13 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
             cursor: "pointer", transition: "all 0.2s",
           }}>📷</button>
 
-          <div style={{ width: "1px", height: "32px", background: "rgba(255,255,255,0.07)" }} />
+          <div style={{ width: "1px", height: "32px", background: "var(--interview-border)" }} />
 
           <button onClick={() => { stop(); router.push("/interview-prep/chat"); }} style={{
             height: "50px", padding: "0 16px", borderRadius: "25px", fontSize: "13px", fontWeight: 500,
             display: "flex", alignItems: "center", gap: "6px",
-            background: "rgba(255,255,255,0.06)", border: "1.5px solid rgba(255,255,255,0.1)",
-            color: "rgba(255,255,255,0.55)", cursor: "pointer", transition: "all 0.2s",
+            background: "var(--interview-btn-bg)", border: "1.5px solid var(--interview-border)",
+            color: "var(--interview-text-dim)", cursor: "pointer", transition: "all 0.2s",
             fontFamily: "'Syne', sans-serif",
           }}>💬 Chat</button>
 
