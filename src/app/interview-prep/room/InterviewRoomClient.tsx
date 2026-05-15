@@ -469,7 +469,6 @@ export default function InterviewRoomClient() {
       let useOscillation = true;
 
       if ("speechSynthesis" in window) {
-        const utter = speechSynthesis.getUtterances?.();
         // Hook into onboundary if browser supports it
         const currentUtter = (window as any).__currentUtterance;
         if (currentUtter) {
