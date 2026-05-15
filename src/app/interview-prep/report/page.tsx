@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import { Trophy, CheckCircle2, AlertTriangle, XCircle, RotateCcw, BarChart3, Loader2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 // ─────────────────────────────────────────────────────
 // Types
@@ -24,26 +30,38 @@ interface InterviewReport {
 }
 
 // ─────────────────────────────────────────────────────
-// Circular score gauge
+// Helpers
+// ─────────────────────────────────────────────────────
+function scoreColor(s: number) {
+  if (s >= 80) return "text-success";
+  if (s >= 60) return "text-warning";
+  return "text-danger";
+}
+
+function scoreBg(s: number) {
+  if (s >= 80) return "bg-success/10 border-success/25";
+  if (s >= 60) return "bg-warning/10 border-warning/25";
+  return "bg-danger/10 border-danger/25";
+}
+
+function scoreHex(s: number) {
+  if (s >= 80) return "#22d3a0";
+  if (s >= 60) return "#f59e0b";
+  return "#f43f5e";
+}
+
+// ─────────────────────────────────────────────────────
+// Score ring (SVG — uses hex for stroke, works in both themes)
 // ─────────────────────────────────────────────────────
 function ScoreRing({
-  score,
-  size = 120,
-  strokeWidth = 10,
-  label,
-  color,
-  animating,
+  score, size = 120, strokeWidth = 10, label, animating,
 }: {
-  score: number;
-  size?: number;
-  strokeWidth?: number;
-  label: string;
-  color: string;
-  animating: boolean;
+  score: number; size?: number; strokeWidth?: number; label: string; animating: boolean;
 }) {
   const [displayed, setDisplayed] = useState(0);
   const r = (size - strokeWidth) / 2;
   const circ = 2 * Math.PI * r;
+  const color = scoreHex(score);
 
   useEffect(() => {
     if (!animating) return;
@@ -60,23 +78,24 @@ function ScoreRing({
   const offset = circ - (displayed / 100) * circ;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-      <div style={{ position: "relative", width: size, height: size }}>
+    <div className="flex flex-col items-center gap-2">
+      <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={strokeWidth} />
-          <circle
-            cx={size / 2} cy={size / 2} r={r} fill="none"
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor"
+            strokeWidth={strokeWidth} className="text-muted/20" />
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none"
             stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"
             strokeDasharray={circ} strokeDashoffset={offset}
-            style={{ transition: "stroke-dashoffset 0.02s linear" }}
-          />
+            style={{ transition: "stroke-dashoffset 0.02s linear" }} />
         </svg>
-        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: size > 100 ? "28px" : "18px", fontWeight: 700, color, lineHeight: 1 }}>{displayed}</span>
-          <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace" }}>/100</span>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className={`font-bold leading-none ${size > 100 ? "text-3xl" : "text-lg"} ${scoreColor(displayed)}`}>
+            {displayed}
+          </span>
+          <span className="text-[9px] text-muted-foreground font-mono">/100</span>
         </div>
       </div>
-      <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textAlign: "center" }}>
+      <span className="text-[10px] text-muted-foreground font-mono tracking-wide text-center uppercase">
         {label}
       </span>
     </div>
@@ -87,30 +106,26 @@ function ScoreRing({
 // Verdict badge
 // ─────────────────────────────────────────────────────
 function VerdictBadge({ verdict }: { verdict: InterviewReport["hiringVerdict"] }) {
-  const config = {
-    "Strong Hire": { color: "#22d3a0", bg: "rgba(34,211,160,0.12)", border: "rgba(34,211,160,0.3)", icon: "🚀" },
-    "Hire": { color: "#63d2ff", bg: "rgba(99,210,255,0.12)", border: "rgba(99,210,255,0.3)", icon: "✅" },
-    "Borderline": { color: "#f59e0b", bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)", icon: "⚖️" },
-    "No Hire": { color: "#f43f5e", bg: "rgba(244,63,94,0.12)", border: "rgba(244,63,94,0.3)", icon: "❌" },
+  const cfg = {
+    "Strong Hire": { icon: <Trophy className="h-4 w-4" />, cls: "bg-success/10 border-success/30 text-success", label: "Strong Hire" },
+    "Hire":        { icon: <CheckCircle2 className="h-4 w-4" />, cls: "bg-primary/10 border-primary/30 text-primary", label: "Hire" },
+    "Borderline":  { icon: <AlertTriangle className="h-4 w-4" />, cls: "bg-warning/10 border-warning/30 text-warning", label: "Borderline" },
+    "No Hire":     { icon: <XCircle className="h-4 w-4" />, cls: "bg-danger/10 border-danger/30 text-danger", label: "No Hire" },
   }[verdict];
 
   return (
-    <div style={{
-      display: "inline-flex", alignItems: "center", gap: "10px",
-      padding: "10px 20px", borderRadius: "12px",
-      background: config.bg, border: `1.5px solid ${config.border}`,
-    }}>
-      <span style={{ fontSize: "20px" }}>{config.icon}</span>
+    <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border ${cfg.cls}`}>
+      {cfg.icon}
       <div>
-        <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em" }}>HIRING VERDICT</div>
-        <div style={{ fontSize: "16px", fontWeight: 700, color: config.color }}>{verdict}</div>
+        <div className="text-[10px] text-muted-foreground font-mono tracking-widest uppercase">Hiring Verdict</div>
+        <div className="text-sm font-bold">{cfg.label}</div>
       </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────
-// Main Report Page
+// Main Page
 // ─────────────────────────────────────────────────────
 export default function InterviewReportPage() {
   const router = useRouter();
@@ -118,13 +133,14 @@ export default function InterviewReportPage() {
   const [loading, setLoading] = useState(true);
   const [animated, setAnimated] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("Analysing your interview...");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const msgs = [
       "Analysing your interview...",
       "Evaluating communication skills...",
       "Scoring technical depth...",
-      "Generating feedback...",
+      "Generating personalised feedback...",
     ];
     let i = 0;
     const interval = setInterval(() => {
@@ -132,29 +148,28 @@ export default function InterviewReportPage() {
       setLoadingMsg(msgs[i]);
     }, 1800);
 
+    // Try cached report first
     const stored = localStorage.getItem("interviewReport");
     if (stored) {
       try {
-        const parsed = JSON.parse(stored);
-        clearInterval(interval);
-        setReport(parsed);
+        setReport(JSON.parse(stored));
         setLoading(false);
+        clearInterval(interval);
         setTimeout(() => setAnimated(true), 300);
         return;
       } catch {}
     }
 
-    // If no report yet — try generating from raw data
     const rawData = localStorage.getItem("interviewRawData");
     if (!rawData) {
       setLoading(false);
+      clearInterval(interval);
       return;
     }
 
     const { transcript, config, elapsed } = JSON.parse(rawData);
 
-    const prompt = `
-You are an expert interview evaluator. Analyse this interview transcript and return ONLY valid JSON.
+    const prompt = `You are an expert interview evaluator. Analyse this interview transcript and return ONLY valid JSON.
 
 INTERVIEW DETAILS:
 - Role: ${config.role || "Software Engineer"}
@@ -177,62 +192,62 @@ Return ONLY this JSON (no markdown, no backticks):
     {
       "question": "<interviewer question>",
       "answer": "<candidate answer summary in 1 sentence>",
-      "feedback": "<specific feedback on this answer>",
+      "feedback": "<specific constructive feedback>",
       "score": <0-100>
     }
   ],
-  "summary": "<2-3 sentence overall performance summary>",
+  "summary": "<2-3 sentence honest overall assessment>",
   "hiringVerdict": "Strong Hire" | "Hire" | "Borderline" | "No Hire"
 }
 
 SCORING RULES:
-- Be honest and specific — do not inflate scores
-- technicalScore: depth of technical knowledge shown
+- Be honest — do not inflate scores
+- technicalScore: depth of technical knowledge demonstrated
 - communicationScore: clarity, articulation, coherence
-- confidenceScore: assertiveness, avoiding filler words, directness
-- structureScore: STAR method usage, organized answers
-- questionFeedback: include up to 5 most important Q&A pairs
-- hiringVerdict: based on overall performance
-`;
+- confidenceScore: assertiveness, directness, avoiding filler words
+- structureScore: STAR method, organised answers
+- questionFeedback: up to 5 most important Q&A pairs
+- hiringVerdict: reflect overall performance honestly`;
 
     import("@/lib/ai/gemini").then(async ({ generateWithRetry }) => {
       try {
         let raw = await generateWithRetry(prompt);
         raw = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
         const parsed = JSON.parse(raw);
-        const fullReport: InterviewReport = {
+        const full: InterviewReport = {
           ...parsed,
           role: config.role || "Software Engineer",
           type: config.type,
           duration: Math.floor(elapsed / 60),
           totalQuestions: parsed.questionFeedback?.length || 0,
         };
-        localStorage.setItem("interviewReport", JSON.stringify(fullReport));
+        localStorage.setItem("interviewReport", JSON.stringify(full));
         clearInterval(interval);
-        setReport(fullReport);
+        setReport(full);
         setLoading(false);
         setTimeout(() => setAnimated(true), 300);
       } catch {
-        // Fallback to Puter
+        // Try Puter fallback
         try {
           const raw = await (window as any).puter.ai.chat(prompt);
           const text = typeof raw === "string" ? raw : (raw as any)?.message?.content ?? JSON.stringify(raw);
           const cleaned = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
           const parsed = JSON.parse(cleaned);
-          const fullReport: InterviewReport = {
+          const full: InterviewReport = {
             ...parsed,
             role: config.role || "Software Engineer",
             type: config.type,
             duration: Math.floor(elapsed / 60),
             totalQuestions: parsed.questionFeedback?.length || 0,
           };
-          localStorage.setItem("interviewReport", JSON.stringify(fullReport));
+          localStorage.setItem("interviewReport", JSON.stringify(full));
           clearInterval(interval);
-          setReport(fullReport);
+          setReport(full);
           setLoading(false);
           setTimeout(() => setAnimated(true), 300);
         } catch {
           clearInterval(interval);
+          setError("Failed to generate report. Please try again.");
           setLoading(false);
         }
       }
@@ -241,207 +256,188 @@ SCORING RULES:
     return () => clearInterval(interval);
   }, []);
 
-  const scoreColor = (s: number) => s >= 80 ? "#22d3a0" : s >= 60 ? "#f59e0b" : "#f43f5e";
-
-  const fmt = (s: number) =>
-    `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
-
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .card { animation: fadeUp 0.5s ease forwards; }
-      `}</style>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+      className="relative max-w-4xl mx-auto pb-10"
+    >
+      <PageHeader
+        icon={BarChart3}
+        title="Interview Report"
+        subtitle="AI-generated analysis of your mock interview performance"
+        gradient="from-rose-500 to-purple-600"
+      />
 
-      <div style={{
-        minHeight: "100vh",
-        background: "radial-gradient(ellipse at 15% 0%, #0b1a2e 0%, #060a10 50%, #040508 100%)",
-        color: "#fff", fontFamily: "'Syne', sans-serif",
-      }}>
-
-        {/* ── NAV ── */}
-        <nav style={{
-          padding: "16px 32px", display: "flex", alignItems: "center", justifyContent: "space-between",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
-          background: "rgba(4,6,12,0.7)", backdropFilter: "blur(12px)",
-          position: "sticky", top: 0, zIndex: 50,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "linear-gradient(135deg, #f43f5e 0%, #a855f7 100%)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>🎯</div>
-            <span style={{ fontWeight: 700, fontSize: "16px" }}>CareerForge</span>
-            <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "20px", background: "rgba(244,63,94,0.1)", color: "#f43f5e", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.08em", border: "1px solid rgba(244,63,94,0.2)" }}>INTERVIEW REPORT</span>
+      {/* Loading */}
+      {loading && (
+        <div className="flex flex-col items-center justify-center py-24 gap-6">
+          <div className="relative w-16 h-16">
+            <Loader2 className="w-16 h-16 text-primary animate-spin" />
           </div>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button
-              onClick={() => router.push("/interview-prep")}
-              style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "13px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontFamily: "'Syne', sans-serif" }}
-            >
-              Practice Again
-            </button>
-            <button
-              onClick={() => router.push("/")}
-              style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "13px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontFamily: "'Syne', sans-serif" }}
-            >
-              ← Home
-            </button>
-          </div>
-        </nav>
+          <p className="text-sm text-muted-foreground font-mono animate-pulse">{loadingMsg}</p>
+        </div>
+      )}
 
-        {/* ── LOADING ── */}
-        {loading && (
-          <div style={{ minHeight: "80vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "24px" }}>
-            <div style={{ position: "relative", width: "80px", height: "80px" }}>
-              <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "2px solid transparent", borderTopColor: "#f43f5e", animation: "spin 1s linear infinite" }} />
-              <div style={{ position: "absolute", inset: "10px", borderRadius: "50%", border: "2px solid transparent", borderTopColor: "#a855f7", animation: "spin 1.5s linear infinite reverse" }} />
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px" }}>📊</div>
-            </div>
-            <p style={{ fontSize: "13px", color: "#a855f7", fontFamily: "'JetBrains Mono', monospace", animation: "pulse 1.5s ease-in-out infinite", letterSpacing: "0.06em" }}>{loadingMsg}</p>
-          </div>
-        )}
+      {/* Error */}
+      {!loading && error && (
+        <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-xl px-4 py-3 mb-6 text-sm">
+          {error}
+          <Button variant="outline" size="sm" className="ml-4" onClick={() => router.push("/interview-prep")}>
+            Try Again
+          </Button>
+        </div>
+      )}
 
-        {/* ── NO DATA ── */}
-        {!loading && !report && (
-          <div style={{ minHeight: "80vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
-            <span style={{ fontSize: "48px" }}>🤷</span>
-            <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "14px" }}>No interview data found.</p>
-            <button onClick={() => router.push("/interview-prep")} style={{ padding: "10px 24px", borderRadius: "10px", background: "rgba(244,63,94,0.15)", color: "#f43f5e", border: "1px solid rgba(244,63,94,0.3)", cursor: "pointer", fontFamily: "'Syne', sans-serif", fontSize: "13px" }}>
-              Start an Interview
-            </button>
-          </div>
-        )}
+      {/* No data */}
+      {!loading && !report && !error && (
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <span className="text-5xl">🤷</span>
+          <p className="text-muted-foreground text-sm">No interview data found.</p>
+          <Button onClick={() => router.push("/interview-prep")}>Start an Interview</Button>
+        </div>
+      )}
 
-        {/* ── REPORT ── */}
-        {!loading && report && (
-          <div style={{ maxWidth: "960px", margin: "0 auto", padding: "40px 24px 80px" }}>
+      {/* Report */}
+      {!loading && report && (
+        <div className="space-y-5">
 
-            {/* Header */}
-            <div className="card" style={{ marginBottom: "32px", animationDelay: "0s" }}>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
-                <div>
-                  <h1 style={{ fontSize: "26px", fontWeight: 800, marginBottom: "6px" }}>
-                    {report.role} Interview
-                  </h1>
-                  <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                    {[
-                      { label: report.type.toUpperCase(), color: "#63d2ff" },
-                      { label: `${report.duration} MIN`, color: "rgba(255,255,255,0.4)" },
-                      { label: `${report.totalQuestions} QUESTIONS`, color: "rgba(255,255,255,0.4)" },
-                    ].map((tag) => (
-                      <span key={tag.label} style={{ fontSize: "10px", fontFamily: "'JetBrains Mono', monospace", color: tag.color, letterSpacing: "0.08em" }}>{tag.label}</span>
-                    ))}
+          {/* Header card */}
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+            <Card className="border-glass-border/80 bg-surface-1/95 shadow-[0_18px_40px_var(--shadow-heavy)]">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between flex-wrap gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-foreground">{report.role} Interview</h2>
+                    <div className="flex gap-3 mt-2 flex-wrap">
+                      <Badge variant="secondary" className="font-mono text-xs uppercase">{report.type}</Badge>
+                      <span className="text-xs text-muted-foreground font-mono">{report.duration} min</span>
+                      <span className="text-xs text-muted-foreground font-mono">{report.totalQuestions} questions</span>
+                    </div>
                   </div>
+                  <VerdictBadge verdict={report.hiringVerdict} />
                 </div>
-                <VerdictBadge verdict={report.hiringVerdict} />
-              </div>
+                <p className="mt-4 text-sm text-muted-foreground leading-relaxed">{report.summary}</p>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-              {/* Summary */}
-              <div style={{ marginTop: "20px", padding: "16px 20px", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.65)", lineHeight: 1.7 }}>{report.summary}</p>
-              </div>
-            </div>
-
-            {/* Score cards row */}
-            <div className="card" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "16px", marginBottom: "20px", animationDelay: "0.1s" }}>
-              {/* Overall — larger */}
-              <div style={{ gridColumn: "span 1", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "24px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
-                <ScoreRing score={report.overallScore} size={120} label="OVERALL" color={scoreColor(report.overallScore)} animating={animated} />
-              </div>
-
-              {[
-                { score: report.communicationScore, label: "COMMUNICATION" },
-                { score: report.technicalScore, label: "TECHNICAL" },
-                { score: report.confidenceScore, label: "CONFIDENCE" },
-                { score: report.structureScore, label: "STRUCTURE" },
-              ].map((item) => (
-                <div key={item.label} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                  <ScoreRing score={item.score} size={80} strokeWidth={7} label={item.label} color={scoreColor(item.score)} animating={animated} />
+          {/* Score cards */}
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <Card className="border-glass-border/80 bg-surface-1/95 shadow-[0_18px_40px_var(--shadow-heavy)]">
+              <CardContent className="p-6">
+                <h3 className="text-sm font-semibold text-foreground mb-5">Performance Scores</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-6 items-center justify-items-center">
+                  <ScoreRing score={report.overallScore} size={120} label="Overall" animating={animated} />
+                  {[
+                    { score: report.communicationScore, label: "Communication" },
+                    { score: report.technicalScore, label: "Technical" },
+                    { score: report.confidenceScore, label: "Confidence" },
+                    { score: report.structureScore, label: "Structure" },
+                  ].map((item) => (
+                    <ScoreRing key={item.label} score={item.score} size={80} strokeWidth={7} label={item.label} animating={animated} />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-            {/* Strengths + Improvements */}
-            <div className="card" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px", animationDelay: "0.2s" }}>
-              {/* Strengths */}
-              <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "24px" }}>
-                <div style={{ fontSize: "11px", color: "#22d3a0", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", marginBottom: "16px" }}>✦ STRENGTHS</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {/* Strengths + Improvements */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+            className="grid grid-cols-1 sm:grid-cols-2 gap-5"
+          >
+            <Card className="border-glass-border/80 bg-surface-1/95 shadow-[0_18px_40px_var(--shadow-heavy)]">
+              <CardContent className="p-6">
+                <h3 className="text-xs font-semibold text-success font-mono tracking-widest uppercase mb-4">✦ Strengths</h3>
+                <div className="space-y-3">
                   {report.strengths.map((s, i) => (
-                    <div key={i} style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
-                      <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22d3a0", marginTop: "6px", flexShrink: 0 }} />
-                      <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.75)", lineHeight: 1.5 }}>{s}</p>
+                    <div key={i} className="flex gap-3 items-start">
+                      <div className="w-1.5 h-1.5 rounded-full bg-success mt-1.5 shrink-0" />
+                      <p className="text-sm text-foreground leading-relaxed">{s}</p>
                     </div>
                   ))}
                 </div>
-              </div>
+              </CardContent>
+            </Card>
 
-              {/* Improvements */}
-              <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "24px" }}>
-                <div style={{ fontSize: "11px", color: "#f59e0b", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", marginBottom: "16px" }}>⚠ AREAS TO IMPROVE</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <Card className="border-glass-border/80 bg-surface-1/95 shadow-[0_18px_40px_var(--shadow-heavy)]">
+              <CardContent className="p-6">
+                <h3 className="text-xs font-semibold text-warning font-mono tracking-widest uppercase mb-4">⚠ Areas to Improve</h3>
+                <div className="space-y-3">
                   {report.improvements.map((s, i) => (
-                    <div key={i} style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
-                      <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#f59e0b", marginTop: "6px", flexShrink: 0 }} />
-                      <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.75)", lineHeight: 1.5 }}>{s}</p>
+                    <div key={i} className="flex gap-3 items-start">
+                      <div className="w-1.5 h-1.5 rounded-full bg-warning mt-1.5 shrink-0" />
+                      <p className="text-sm text-foreground leading-relaxed">{s}</p>
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-            {/* Question-by-question feedback */}
-            <div className="card" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "24px", animationDelay: "0.3s" }}>
-              <div style={{ fontSize: "11px", color: "#a855f7", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", marginBottom: "20px" }}>🔍 QUESTION-BY-QUESTION ANALYSIS</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                {report.questionFeedback.map((item, i) => (
-                  <div key={i} style={{ padding: "16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px", marginBottom: "10px" }}>
-                      <p style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.9)", lineHeight: 1.4, flex: 1 }}>Q{i + 1}. {item.question}</p>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-                        <div style={{ width: "40px", height: "6px", borderRadius: "3px", background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${item.score}%`, background: scoreColor(item.score), borderRadius: "3px", transition: "width 1s ease" }} />
+          {/* Q&A Feedback */}
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <Card className="border-glass-border/80 bg-surface-1/95 shadow-[0_18px_40px_var(--shadow-heavy)]">
+              <CardContent className="p-6">
+                <h3 className="text-xs font-semibold text-primary font-mono tracking-widest uppercase mb-5">🔍 Question-by-Question Analysis</h3>
+                <div className="space-y-4">
+                  {report.questionFeedback.map((item, i) => (
+                    <div key={i} className={`p-4 rounded-xl border ${scoreBg(item.score)}`}>
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <p className="text-sm font-semibold text-foreground leading-snug flex-1">
+                          Q{i + 1}. {item.question}
+                        </p>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="w-10 h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-700"
+                              style={{ width: `${item.score}%`, background: scoreHex(item.score) }}
+                            />
+                          </div>
+                          <span className={`text-xs font-bold font-mono ${scoreColor(item.score)}`}>{item.score}</span>
                         </div>
-                        <span style={{ fontSize: "11px", fontWeight: 600, color: scoreColor(item.score), fontFamily: "'JetBrains Mono', monospace" }}>{item.score}</span>
                       </div>
+                      <p className="text-xs text-muted-foreground font-mono mb-2 leading-relaxed">
+                        Your answer: {item.answer}
+                      </p>
+                      <p className="text-xs text-foreground/70 leading-relaxed border-l-2 border-primary/30 pl-3">
+                        {item.feedback}
+                      </p>
                     </div>
-                    <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono', monospace", marginBottom: "8px", lineHeight: 1.5 }}>
-                      Your answer: {item.answer}
-                    </p>
-                    <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.6)", lineHeight: 1.6, borderLeft: "2px solid rgba(168,85,247,0.4)", paddingLeft: "10px" }}>
-                      {item.feedback}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-            {/* CTA */}
-            <div className="card" style={{ marginTop: "24px", display: "flex", gap: "12px", justifyContent: "center", animationDelay: "0.4s" }}>
-              <button
-                onClick={() => {
-                  localStorage.removeItem("interviewReport");
-                  localStorage.removeItem("interviewRawData");
-                  router.push("/interview-prep/room");
-                }}
-                style={{ padding: "12px 28px", borderRadius: "12px", fontSize: "14px", fontWeight: 600, background: "linear-gradient(135deg, #f43f5e 0%, #a855f7 100%)", border: "none", color: "#fff", cursor: "pointer", fontFamily: "'Syne', sans-serif" }}
-              >
-                🔄 Retry Interview
-              </button>
-              <button
-                onClick={() => router.push("/job-analyse")}
-                style={{ padding: "12px 28px", borderRadius: "12px", fontSize: "14px", fontWeight: 600, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontFamily: "'Syne', sans-serif" }}
-              >
-                📊 Analyse Job Fit
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </>
+          {/* CTAs */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+            className="flex flex-col sm:flex-row gap-3"
+          >
+            <Button
+              className="flex-1 gap-2 bg-gradient-to-r from-rose-500 to-purple-600 hover:from-rose-600 hover:to-purple-700 text-white border-0"
+              onClick={() => {
+                localStorage.removeItem("interviewReport");
+                localStorage.removeItem("interviewRawData");
+                router.push("/interview-prep/room");
+              }}
+            >
+              <RotateCcw className="h-4 w-4" />
+              Retry Interview
+            </Button>
+            <Button variant="outline" className="flex-1 gap-2" onClick={() => router.push("/job-analyse")}>
+              <BarChart3 className="h-4 w-4" />
+              Analyse Job Fit
+            </Button>
+            <Button variant="ghost" className="flex-1" onClick={() => router.push("/interview-prep")}>
+              ← Back to Setup
+            </Button>
+          </motion.div>
+        </div>
+      )}
+    </motion.div>
   );
 }
