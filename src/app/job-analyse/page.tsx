@@ -306,6 +306,7 @@ Return ONLY the JSON object, nothing else, no markdown.
           throw new Error("AI unavailable. Please configure your Gemini API key in Settings.");
         }
       }
+      if (typeof raw !== "string") raw = (raw as any)?.message?.content ?? (raw as any)?.text ?? JSON.stringify(raw);
       raw = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
       const geminiResult = JSON.parse(raw);
 
