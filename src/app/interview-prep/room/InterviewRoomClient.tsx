@@ -391,7 +391,14 @@ export default function InterviewRoomClient() {
     document.head.appendChild(script);
   }, []);
 
-  // ── Full teardown — stops everything immediately ──
+  // ── Full teardown — stored in a ref so it is always stable (no dependency churn) ──
+  // We keep stop/stopSTT in their own refs so teardown can always call the latest version
+  // without needing them in its dependency array (which would make teardown unstable).
+  const stopRef = useRef(stop);
+  const stopSTTRef = useRef(stopSTT);
+  useEffect(() => { stopRef.current = stop; }, [stop]);
+  useEffect(() => { stopSTTRef.current = stopSTT; }, [stopSTT]);
+
   const teardown = useCallback(() => {
     isExiting.current = true;
     lipSyncAlive.current = false;
@@ -399,8 +406,8 @@ export default function InterviewRoomClient() {
     aiAbortRef.current?.abort();
     aiAbortRef.current = null;
     // Kill all speech immediately
-    speechSynthesis.cancel();
-    stop(); // TTS hook cleanup
+    if (typeof window !== "undefined") speechSynthesis.cancel();
+    stopRef.current?.(); // TTS hook cleanup
     // Silence all avatar signals
     signalRefs.current.forEach((ref) => {
       ref.current.isSpeaking = false;
@@ -408,19 +415,20 @@ export default function InterviewRoomClient() {
       ref.current.viseme = "sil";
     });
     // Stop microphone
-    stopSTT();
+    stopSTTRef.current?.();
     // Stop camera stream
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
-  }, [stop, stopSTT]);
+  }, []); // stable — no deps, reads everything through refs
 
   // ── Cleanup on unmount ──
   useEffect(() => {
     return () => { teardown(); };
   }, [teardown]);
 
-  // ── Intercept browser back / navigate away ──
+  // ── Intercept browser back / navigate away (client-side only) ──
   useEffect(() => {
+    if (typeof window === "undefined") return;
     const handlePopState = () => { teardown(); };
     const handleBeforeUnload = () => { teardown(); };
     window.addEventListener("popstate", handlePopState);
@@ -429,7 +437,7 @@ export default function InterviewRoomClient() {
       window.removeEventListener("popstate", handlePopState);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [teardown]);
+  }, [teardown]); // teardown is now stable so this runs exactly once
 
   // ── Auto-scroll transcript ──
   useEffect(() => {
