@@ -338,6 +338,10 @@ export default function InterviewRoomClient() {
   const interviewStarted = useRef(false);
   // Tracks how many interviewer questions have been asked (used for difficulty + question-type scheduling)
   const questionCount = useRef(0);
+  // AbortController for any in-flight AI request — cancelled on unmount/exit
+  const aiAbortRef = useRef<AbortController | null>(null);
+  // Flag flipped to true the moment we start leaving — prevents any post-exit AI callbacks from firing
+  const isExiting = useRef(false);
 
   const signalRefs = useRef<React.MutableRefObject<AvatarSignal>[]>([
     { current: { isSpeaking: false, amplitude: 0, viseme: "sil" } },
@@ -387,13 +391,45 @@ export default function InterviewRoomClient() {
     document.head.appendChild(script);
   }, []);
 
-  // ── Cleanup ──
+  // ── Full teardown — stops everything immediately ──
+  const teardown = useCallback(() => {
+    isExiting.current = true;
+    lipSyncAlive.current = false;
+    // Cancel any in-flight AI request so its callback never fires
+    aiAbortRef.current?.abort();
+    aiAbortRef.current = null;
+    // Kill all speech immediately
+    speechSynthesis.cancel();
+    stop(); // TTS hook cleanup
+    // Silence all avatar signals
+    signalRefs.current.forEach((ref) => {
+      ref.current.isSpeaking = false;
+      ref.current.amplitude = 0;
+      ref.current.viseme = "sil";
+    });
+    // Stop microphone
+    stopSTT();
+    // Stop camera stream
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }, [stop, stopSTT]);
+
+  // ── Cleanup on unmount ──
   useEffect(() => {
+    return () => { teardown(); };
+  }, [teardown]);
+
+  // ── Intercept browser back / navigate away ──
+  useEffect(() => {
+    const handlePopState = () => { teardown(); };
+    const handleBeforeUnload = () => { teardown(); };
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
-      lipSyncAlive.current = false;
-      speechSynthesis.cancel();
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, []);
+  }, [teardown]);
 
   // ── Auto-scroll transcript ──
   useEffect(() => {
@@ -539,11 +575,13 @@ Respond with just the spoken text, nothing else.`;
 
     generateWithFallback(prompt)
       .then((openingText) => {
+        if (isExiting.current) return; // navigated away before opening finished
         speakAs(0, openingText);
         setMessages([{ role: "assistant", speakerIndex: 0, content: openingText }]);
         setTranscriptLines([`${firstPersona.name}: ${openingText}`]);
       })
       .catch(() => {
+        if (isExiting.current) return;
         // Fallback opening if Gemini fails
         const fallback = `Hi, welcome to your ${config.type} interview for the ${config.role || "Software Engineer"} role. Let's start — can you briefly introduce yourself?`;
         speakAs(0, fallback);
@@ -636,8 +674,16 @@ Respond ONLY in this exact JSON format (no markdown, no code blocks):
   "response": "The interviewer's spoken response here"
 }`;
 
+    // Create a fresh AbortController for this request; store it so teardown can cancel it
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
+
     try {
       let text = (await generateWithFallback(prompt)).trim();
+
+      // If we exited while the request was in-flight, drop the result silently
+      if (isExiting.current || controller.signal.aborted) return;
+
       text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
       const data = JSON.parse(text) as { speakerIndex: number; response: string };
 
@@ -651,6 +697,7 @@ Respond ONLY in this exact JSON format (no markdown, no code blocks):
       setMessages([...updatedMessages, { role: "assistant", speakerIndex: nextIdx, content: aiText }]);
       setTranscriptLines((t) => [...t, `${speaker.name}: ${aiText}`]);
     } catch (err: unknown) {
+      if (isExiting.current) return; // swallow errors that fire after exit
       setIsThinking(false);
       const message = err instanceof Error ? err.message : "AI error";
       setError(message);
@@ -670,18 +717,16 @@ Respond ONLY in this exact JSON format (no markdown, no code blocks):
   }, [isRecording, start, stopSTT, finalTranscript, liveText, handleUserMessage]);
 
   const handleEnd = useCallback(() => {
-    lipSyncAlive.current = false;
-    stop();
-    speechSynthesis.cancel();
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    // Save data first, then teardown so transcriptLines is still intact
     localStorage.setItem("interviewRawData", JSON.stringify({
       transcript: transcriptLines.join("\n"),
       config,
       elapsed,
     }));
     localStorage.removeItem("interviewReport");
+    teardown();
     router.push("/interview-prep/report");
-  }, [stop, router, transcriptLines, config, elapsed]);
+  }, [teardown, router, transcriptLines, config, elapsed]);
 
   const fmt = (s: number) =>
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
@@ -966,7 +1011,7 @@ Respond ONLY in this exact JSON format (no markdown, no code blocks):
 
           <div style={{ width: "1px", height: "32px", background: "var(--interview-border)" }} />
 
-          <button onClick={() => { stop(); router.push("/interview-prep/chat"); }} style={{
+          <button onClick={() => { teardown(); router.push("/interview-prep/chat"); }} style={{
             height: "50px", padding: "0 16px", borderRadius: "25px", fontSize: "13px", fontWeight: 500,
             display: "flex", alignItems: "center", gap: "6px",
             background: "var(--interview-btn-bg)", border: "1.5px solid var(--interview-border)",
