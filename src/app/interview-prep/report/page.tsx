@@ -10,6 +10,31 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 
 // ─────────────────────────────────────────────────────
+// Puter.js — same fallback pattern used in InterviewRoomClient
+// CDN script is injected once on mount; generateReport() uses it as fallback
+// ─────────────────────────────────────────────────────
+async function generateWithPuter(prompt: string): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const puter = (window as any).puter;
+  if (!puter?.ai?.chat) throw new Error("Puter not available");
+  const response = await puter.ai.chat(prompt, { model: "gpt-4o-mini" });
+  if (typeof response === "string") return response;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (response as any)?.message?.content ?? (response as any)?.content ?? String(response);
+}
+
+// Tries Gemini first; falls back to puter.js on any error (quota, network, etc.)
+async function generateReportText(prompt: string): Promise<string> {
+  try {
+    const { generateWithRetry } = await import("@/lib/ai/gemini");
+    return await generateWithRetry(prompt);
+  } catch (err) {
+    console.warn("[Report] Gemini failed, trying puter.js fallback:", err);
+    return await generateWithPuter(prompt);
+  }
+}
+
+// ─────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────
 interface InterviewReport {
@@ -135,6 +160,17 @@ export default function InterviewReportPage() {
   const [loadingMsg, setLoadingMsg] = useState("Analysing your interview...");
   const [error, setError] = useState("");
 
+  // ── Load puter.js CDN for AI fallback (mirrors InterviewRoomClient) ──
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).puter) return; // already loaded
+    const script = document.createElement("script");
+    script.src = "https://js.puter.com/v2/";
+    script.async = true;
+    document.head.appendChild(script);
+  }, []);
+
   useEffect(() => {
     const msgs = [
       "Analysing your interview...",
@@ -209,11 +245,11 @@ SCORING RULES:
 - questionFeedback: up to 5 most important Q&A pairs
 - hiringVerdict: reflect overall performance honestly`;
 
-    import("@/lib/ai/gemini").then(async ({ generateWithRetry }) => {
-      try {
-        let raw = await generateWithRetry(prompt);
-        raw = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-        const parsed = JSON.parse(raw);
+    // generateReportText tries Gemini first, then puter.js — same prompt goes to both
+    generateReportText(prompt)
+      .then((raw) => {
+        const cleaned = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+        const parsed = JSON.parse(cleaned);
         const full: InterviewReport = {
           ...parsed,
           role: config.role || "Software Engineer",
@@ -226,32 +262,12 @@ SCORING RULES:
         setReport(full);
         setLoading(false);
         setTimeout(() => setAnimated(true), 300);
-      } catch {
-        // Try Puter fallback
-        try {
-          const raw = await (window as any).puter.ai.chat(prompt);
-          const text = typeof raw === "string" ? raw : (raw as any)?.message?.content ?? JSON.stringify(raw);
-          const cleaned = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-          const parsed = JSON.parse(cleaned);
-          const full: InterviewReport = {
-            ...parsed,
-            role: config.role || "Software Engineer",
-            type: config.type,
-            duration: Math.floor(elapsed / 60),
-            totalQuestions: parsed.questionFeedback?.length || 0,
-          };
-          localStorage.setItem("interviewReport", JSON.stringify(full));
-          clearInterval(interval);
-          setReport(full);
-          setLoading(false);
-          setTimeout(() => setAnimated(true), 300);
-        } catch {
-          clearInterval(interval);
-          setError("Failed to generate report. Please try again.");
-          setLoading(false);
-        }
-      }
-    });
+      })
+      .catch(() => {
+        clearInterval(interval);
+        setError("Failed to generate report. Please try again.");
+        setLoading(false);
+      });
 
     return () => clearInterval(interval);
   }, []);
