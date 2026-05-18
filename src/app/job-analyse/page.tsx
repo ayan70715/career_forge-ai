@@ -138,12 +138,22 @@ export default function JobAnalyserPage() {
   const [geminiFailed, setGeminiFailed] = useState(false);
 
   // ── Load Puter.js fallback ──
+  // IMPORTANT: never remove the script on cleanup — puter registers a custom element
+  // ("puter-dialog") once on first load. Removing + re-adding the script tag causes
+  // customElements.define() to fire again and throw NotSupportedError: already defined.
+  // The window.puter guard ensures we only inject once even across hot-reloads.
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).puter) return; // already loaded — do not re-inject
+    // Also skip if script tag is already in the DOM (e.g. injected by another page)
+    if (document.querySelector('script[src="https://js.puter.com/v2/"]')) return;
     const s = document.createElement("script");
     s.src = "https://js.puter.com/v2/";
     s.async = true;
-    document.body.appendChild(s);
-    return () => { document.body.removeChild(s); };
+    document.head.appendChild(s); // head, not body — avoids layout reflow
+    // No cleanup: removing the tag does NOT unregister custom elements,
+    // so it would only cause a re-inject crash on the next mount.
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -283,30 +293,45 @@ STRICT RULES FOR compatibilityScore:
 Return ONLY the JSON object, nothing else, no markdown.
 `;
 
-      // ── Gemini with Puter.js fallback ──
+      // ── Gemini with silent Puter.js fallback ──
+      // Puter is tried automatically on ANY Gemini error (429, network, quota).
+      // No user-visible error is shown if puter succeeds — the loading screen just
+      // continues and the result appears normally.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const puterChat = async (p: string): Promise<string> => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const puter = (window as any).puter;
+        if (!puter?.ai?.chat) throw new Error("Puter not available");
+        const res = await puter.ai.chat(p, { model: "gpt-4o-mini" });
+        if (typeof res === "string") return res;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (res as any)?.message?.content ?? (res as any)?.text ?? JSON.stringify(res);
+      };
+
       let raw = "";
-      if (apiKey && !geminiFailed) {
-        try {
+      try {
+        // Always try Gemini first if an API key exists and it hasn't hard-failed this session
+        if (apiKey && !geminiFailed) {
           raw = await generateWithRetry(prompt);
-        } catch (err: any) {
-          setGeminiFailed(true);
-          setError("⚠️ Gemini failed — using fallback AI");
-          try {
-            raw = await (window as any).puter.ai.chat(prompt);
-            if (typeof raw !== "string") raw = (raw as any)?.message?.content ?? (raw as any)?.text ?? JSON.stringify(raw);
-          } catch {
-            throw new Error("Both Gemini and fallback AI failed. Please try again.");
-          }
+        } else {
+          // No key or known Gemini failure — go straight to puter
+          raw = await puterChat(prompt);
         }
-      } else {
+      } catch (geminiErr) {
+        // Gemini failed (429, quota, network) — silently fall back to puter
+        console.warn("[JobAnalyser] Gemini failed, falling back to puter.js:", geminiErr);
+        setGeminiFailed(true); // remember for this session so next run skips Gemini
         try {
-          raw = await (window as any).puter.ai.chat(prompt);
-          if (typeof raw !== "string") raw = (raw as any)?.message?.content ?? (raw as any)?.text ?? JSON.stringify(raw);
+          raw = await puterChat(prompt);
         } catch {
-          throw new Error("AI unavailable. Please configure your Gemini API key in Settings.");
+          throw new Error("Analysis failed. Please check your API key or try again later.");
         }
       }
-      if (typeof raw !== "string") raw = (raw as any)?.message?.content ?? (raw as any)?.text ?? JSON.stringify(raw);
+      // Normalise response shape (puter can return object or string)
+      if (typeof raw !== "string") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        raw = (raw as any)?.message?.content ?? (raw as any)?.text ?? JSON.stringify(raw);
+      }
       raw = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
       const geminiResult = JSON.parse(raw);
 
