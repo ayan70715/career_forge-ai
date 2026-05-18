@@ -4,49 +4,123 @@ import { useEffect, useState } from "react";
 
 /* ── Resume Builder: Animated typing lines ── */
 export function ResumePreview() {
+  const [lineWidths, setLineWidths] = useState([100, 85, 70]);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 2200);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    setLineWidths([
+      Math.floor(Math.random() * 20) + 75,
+      Math.floor(Math.random() * 20) + 65,
+      Math.floor(Math.random() * 20) + 55,
+    ]);
+  }, [tick]);
+
   return (
-    <div className="space-y-2 p-1">
-      {/* Mini resume mockup */}
-      <div className="rounded-lg border border-glass-border bg-surface-1 p-3 space-y-2">
-        <div className="h-2.5 w-24 rounded-full bg-primary/30 animate-shimmer" />
-        <div className="h-1.5 w-32 rounded-full bg-surface-6" />
-        <div className="mt-3 space-y-1.5">
-          <div className="h-1.5 w-full rounded-full bg-surface-5 animate-[shimmer_3s_ease-in-out_infinite]" />
-          <div className="h-1.5 w-[85%] rounded-full bg-surface-4 animate-[shimmer_3s_ease-in-out_0.2s_infinite]" />
-          <div className="h-1.5 w-[70%] rounded-full bg-surface-3 animate-[shimmer_3s_ease-in-out_0.4s_infinite]" />
+    <div className="p-1 h-full flex flex-col gap-2">
+      {/* Header band */}
+      <div className="rounded-lg border border-glass-border bg-surface-1 p-3 flex items-center gap-3">
+        <div className="h-8 w-8 rounded-full bg-linear-to-br from-violet-500 to-purple-700 shrink-0" />
+        <div className="flex-1 space-y-1.5">
+          <div className="h-2 w-24 rounded-full bg-primary/30 animate-[shimmer_3s_ease-in-out_infinite]" />
+          <div className="h-1.5 w-16 rounded-full bg-surface-5" />
         </div>
-        <div className="mt-2 space-y-1.5">
-          <div className="h-2 w-20 rounded-full bg-violet-500/20" />
-          <div className="h-1.5 w-full rounded-full bg-surface-4" />
-          <div className="h-1.5 w-[90%] rounded-full bg-surface-3" />
+      </div>
+
+      {/* Section blocks */}
+      <div className="rounded-lg border border-glass-border bg-surface-1 p-3 space-y-2 flex-1">
+        <div className="h-1.5 w-14 rounded-full bg-violet-500/30" />
+        <div className="space-y-1.5">
+          {lineWidths.map((w, i) => (
+            <div
+              key={i}
+              className="h-1.5 rounded-full bg-surface-5 transition-all duration-700 ease-out"
+              style={{
+                width: `${w}%`,
+                animationDelay: `${i * 0.2}s`,
+                background: i === 0 ? "var(--surface-6)" : i === 1 ? "var(--surface-5)" : "var(--surface-4)",
+              }}
+            />
+          ))}
         </div>
-        <div className="mt-2 space-y-1.5">
-          <div className="h-2 w-16 rounded-full bg-violet-500/20" />
-          <div className="h-1.5 w-[80%] rounded-full bg-surface-4" />
-          <div className="h-1.5 w-full rounded-full bg-surface-3" />
+        <div className="mt-2 h-px w-full bg-glass-border" />
+        <div className="h-1.5 w-16 rounded-full bg-violet-500/20 mt-2" />
+        <div className="space-y-1.5">
+          <div className="h-1.5 w-full rounded-full bg-surface-4 animate-[shimmer_3.5s_ease-in-out_0.3s_infinite]" />
+          <div className="h-1.5 w-[90%] rounded-full bg-surface-3 animate-[shimmer_3.5s_ease-in-out_0.5s_infinite]" />
         </div>
+      </div>
+
+      {/* Skill chips row */}
+      <div className="flex gap-1.5 flex-wrap">
+        {["React", "TypeScript", "Node.js"].map((s) => (
+          <div key={s} className="h-4 rounded-full border border-primary/20 bg-primary/8 px-2 flex items-center">
+            <div className="h-1 rounded-full bg-primary/40" style={{ width: `${s.length * 5}px` }} />
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-/* ── AI Enhance: Shimmer transformation ── */
+/* ── AI Enhance: Before → After shimmer ── */
 export function EnhancePreview() {
+  const [phase, setPhase] = useState<"before" | "sweeping" | "after">("before");
+
+  useEffect(() => {
+    const cycle = () => {
+      setPhase("before");
+      setTimeout(() => setPhase("sweeping"), 1000);
+      setTimeout(() => setPhase("after"), 1800);
+      setTimeout(() => cycle(), 4000);
+    };
+    cycle();
+    return () => {};
+  }, []);
+
   return (
-    <div className="relative p-1">
-      <div className="rounded-lg border border-glass-border bg-surface-1 p-3 space-y-2">
-        {/* "Before" text fading out */}
-        <div className="space-y-1.5 opacity-40">
-          <div className="h-1.5 w-full rounded-full bg-surface-6" />
-          <div className="h-1.5 w-[75%] rounded-full bg-surface-5" />
+    <div className="p-1 space-y-2">
+      {/* Before block */}
+      <div
+        className="rounded-lg border border-glass-border bg-surface-1 p-3 space-y-1.5 transition-all duration-500"
+        style={{ opacity: phase === "after" ? 0.3 : 1 }}
+      >
+        <div className="h-1.5 w-10 rounded-full bg-surface-5 mb-2" />
+        <div className="h-1.5 w-full rounded-full bg-surface-5" />
+        <div className="h-1.5 w-[75%] rounded-full bg-surface-4" />
+        <div className="h-1.5 w-[60%] rounded-full bg-surface-3" />
+      </div>
+
+      {/* Sweep line */}
+      <div className="relative h-px overflow-hidden">
+        <div
+          className="absolute inset-0 bg-linear-to-r from-transparent via-amber-400/70 to-transparent transition-all duration-700"
+          style={{
+            opacity: phase === "sweeping" ? 1 : 0,
+            transform: phase === "sweeping" ? "scaleX(1)" : "scaleX(0)",
+          }}
+        />
+      </div>
+
+      {/* After block */}
+      <div
+        className="rounded-lg border bg-surface-1 p-3 space-y-1.5 transition-all duration-500"
+        style={{
+          borderColor: phase === "after" ? "rgba(251,191,36,0.25)" : "var(--glass-border)",
+          opacity: phase === "after" ? 1 : 0.4,
+        }}
+      >
+        <div className="flex items-center gap-1.5 mb-2">
+          <div className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+          <div className="h-1.5 w-14 rounded-full bg-amber-400/30" />
         </div>
-        {/* Shimmer sweep line */}
-        <div className="h-px w-full bg-linear-to-r from-transparent via-amber-400/40 to-transparent animate-shimmer" />
-        {/* "After" text brighter */}
-        <div className="space-y-1.5">
-          <div className="h-1.5 w-full rounded-full bg-amber-400/20 animate-[shimmer_2.5s_ease-in-out_infinite]" />
-          <div className="h-1.5 w-[85%] rounded-full bg-amber-400/15 animate-[shimmer_2.5s_ease-in-out_0.3s_infinite]" />
-        </div>
+        <div className="h-1.5 w-full rounded-full bg-amber-400/20 animate-[shimmer_2.5s_ease-in-out_infinite]" />
+        <div className="h-1.5 w-[88%] rounded-full bg-amber-400/15 animate-[shimmer_2.5s_ease-in-out_0.3s_infinite]" />
+        <div className="h-1.5 w-[70%] rounded-full bg-amber-400/10 animate-[shimmer_2.5s_ease-in-out_0.6s_infinite]" />
       </div>
     </div>
   );
@@ -61,10 +135,7 @@ export function ATSPreview() {
     const timer = setTimeout(() => {
       const interval = setInterval(() => {
         setScore((prev) => {
-          if (prev >= target) {
-            clearInterval(interval);
-            return target;
-          }
+          if (prev >= target) { clearInterval(interval); return target; }
           return prev + 1;
         });
       }, 20);
@@ -73,43 +144,48 @@ export function ATSPreview() {
     return () => clearTimeout(timer);
   }, []);
 
-  const circumference = 2 * Math.PI * 36;
+  const r = 38;
+  const circumference = 2 * Math.PI * r;
   const offset = circumference - (score / 100) * circumference;
 
   return (
-    <div className="flex items-center justify-center p-2">
+    <div className="flex flex-col items-center justify-center gap-3 p-2">
       <div className="relative">
-        <svg width="90" height="90" viewBox="0 0 90 90" className="-rotate-90">
+        <svg width="96" height="96" viewBox="0 0 96 96" className="-rotate-90">
+          <circle cx="48" cy="48" r={r} fill="none" stroke="var(--surface-4)" strokeWidth="6" />
           <circle
-            cx="45"
-            cy="45"
-            r="36"
+            cx="48" cy="48" r={r}
             fill="none"
-            stroke="var(--surface-5)"
-            strokeWidth="5"
-          />
-          <circle
-            cx="45"
-            cy="45"
-            r="36"
-            fill="none"
-            stroke="url(#atsGradient)"
-            strokeWidth="5"
+            stroke="url(#atsGrad)"
+            strokeWidth="6"
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
-            style={{ transition: "stroke-dashoffset 0.1s ease" }}
+            style={{ transition: "stroke-dashoffset 0.08s ease" }}
           />
           <defs>
-            <linearGradient id="atsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <linearGradient id="atsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#10b981" />
               <stop offset="100%" stopColor="#34d399" />
             </linearGradient>
           </defs>
         </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-xl font-bold text-emerald-400">{score}%</span>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-2xl font-bold text-emerald-400 leading-none">{score}%</span>
+          <span className="text-[9px] text-muted-foreground mt-0.5 tracking-wider">ATS SCORE</span>
         </div>
+      </div>
+      {/* Mini keyword matches */}
+      <div className="flex gap-1.5 flex-wrap justify-center">
+        {["Python", "ML", "APIs"].map((k, i) => (
+          <div
+            key={k}
+            className="h-4 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 flex items-center"
+            style={{ animationDelay: `${i * 0.2}s` }}
+          >
+            <div className="h-1 rounded-full bg-emerald-400/50" style={{ width: `${k.length * 5}px` }} />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -117,19 +193,38 @@ export function ATSPreview() {
 
 /* ── CV Generator: Document preview ── */
 export function CVPreview() {
+  const [lineVisible, setLineVisible] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setLineVisible(true), 600);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
-    <div className="p-1">
+    <div className="p-1 space-y-2">
       <div className="rounded-lg border border-glass-border bg-surface-1 p-3 space-y-2">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="h-2 w-2 rounded-full bg-cyan-400/40" />
-          <div className="h-1.5 w-20 rounded-full bg-cyan-400/20" />
+        {/* Header with avatar placeholder */}
+        <div className="flex items-center gap-2 pb-2 border-b border-glass-border">
+          <div className="h-6 w-6 rounded-full bg-linear-to-br from-cyan-500 to-blue-600 shrink-0" />
+          <div className="flex-1 space-y-1">
+            <div className="h-1.5 w-20 rounded-full bg-cyan-400/25" />
+            <div className="h-1 w-14 rounded-full bg-surface-4" />
+          </div>
+          <div className="h-4 w-8 rounded border border-cyan-500/20 bg-cyan-500/10" />
         </div>
+
+        {/* Body lines */}
         <div className="space-y-1.5">
           <div className="h-1.5 w-full rounded-full bg-surface-5" />
           <div className="h-1.5 w-[90%] rounded-full bg-surface-4" />
-          <div className="h-1.5 w-[70%] rounded-full bg-surface-3" />
+          <div
+            className="h-1.5 rounded-full bg-surface-3 transition-all duration-700"
+            style={{ width: lineVisible ? "70%" : "20%" }}
+          />
         </div>
-        <div className="mt-2 h-px w-full bg-glass-border" />
+
+        <div className="mt-1 h-px w-full bg-glass-border" />
+
         <div className="space-y-1.5">
           <div className="h-1.5 w-[80%] rounded-full bg-surface-4" />
           <div className="h-1.5 w-full rounded-full bg-surface-3" />
@@ -145,7 +240,6 @@ export function InterviewPreview() {
   const [speaking, setSpeaking] = useState<"ai" | "user" | null>("ai");
   const [bars, setBars] = useState([3, 5, 2, 7, 4, 6, 3, 5]);
 
-  // Cycle speaking turns
   useEffect(() => {
     const sequence = ["ai", null, "user", null, "ai"] as const;
     let idx = 0;
@@ -156,22 +250,18 @@ export function InterviewPreview() {
     return () => clearInterval(interval);
   }, []);
 
-  // Animate waveform bars when speaking
   useEffect(() => {
     if (!speaking) return;
     const interval = setInterval(() => {
-      setBars((prev) =>
-        prev.map(() => Math.floor(Math.random() * 7) + 1)
-      );
+      setBars((prev) => prev.map(() => Math.floor(Math.random() * 7) + 1));
     }, 150);
     return () => clearInterval(interval);
   }, [speaking]);
 
   return (
     <div className="p-1 space-y-1.5">
-      {/* Video grid */}
       <div className="grid grid-cols-2 gap-1.5">
-        {/* AI interviewer tile */}
+        {/* AI tile */}
         <div
           className={`relative rounded-lg bg-surface-2 border overflow-hidden transition-all duration-300 ${
             speaking === "ai"
@@ -180,7 +270,6 @@ export function InterviewPreview() {
           }`}
           style={{ aspectRatio: "4/3" }}
         >
-          {/* Avatar */}
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="h-8 w-8 rounded-full bg-linear-to-br from-violet-500 to-purple-600 flex items-center justify-center">
               <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -189,15 +278,12 @@ export function InterviewPreview() {
               </svg>
             </div>
           </div>
-          {/* Speaking indicator ring */}
           {speaking === "ai" && (
             <div className="absolute inset-0 rounded-lg border-2 border-violet-500/50 animate-[pulse_1s_ease-in-out_infinite]" />
           )}
-          {/* Label */}
           <div className="absolute bottom-1 left-1 bg-black/40 backdrop-blur-sm rounded px-1 py-0.5">
             <span className="text-[9px] text-white/80 font-medium">AI Interviewer</span>
           </div>
-          {/* Mic icon */}
           <div className="absolute top-1 right-1">
             <div className={`h-3.5 w-3.5 rounded-full flex items-center justify-center ${speaking === "ai" ? "bg-violet-500/80" : "bg-surface-4"}`}>
               <svg className="h-2 w-2 text-white" viewBox="0 0 24 24" fill="currentColor">
@@ -217,7 +303,6 @@ export function InterviewPreview() {
           }`}
           style={{ aspectRatio: "4/3" }}
         >
-          {/* Avatar */}
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="h-8 w-8 rounded-full bg-linear-to-br from-rose-500 to-pink-600 flex items-center justify-center">
               <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -243,9 +328,8 @@ export function InterviewPreview() {
         </div>
       </div>
 
-      {/* Waveform / toolbar row */}
+      {/* Waveform toolbar */}
       <div className="rounded-lg border border-glass-border bg-surface-1 px-2 py-1.5 flex items-center justify-between gap-2">
-        {/* Animated waveform */}
         <div className="flex items-center gap-[2px] h-4">
           {bars.map((h, i) => (
             <div
@@ -257,7 +341,6 @@ export function InterviewPreview() {
             />
           ))}
         </div>
-        {/* Control icons */}
         <div className="flex items-center gap-1.5">
           <div className="h-4 w-4 rounded-full bg-surface-3 flex items-center justify-center">
             <svg className="h-2 w-2 text-muted-foreground" viewBox="0 0 24 24" fill="currentColor">
@@ -275,6 +358,20 @@ export function InterviewPreview() {
 
 /* ── Resume Verifier: Mixed test signal ── */
 export function ResumeVerifierPreview() {
+  const [checks, setChecks] = useState([false, false, false]);
+
+  useEffect(() => {
+    [0, 1, 2].forEach((i) => {
+      setTimeout(() => setChecks((prev) => { const next = [...prev]; next[i] = true; return next; }), 600 + i * 400);
+    });
+  }, []);
+
+  const statuses = [
+    { color: "border-emerald-500/40 bg-emerald-500/10", dot: "bg-emerald-400" },
+    { color: "border-amber-500/40 bg-amber-500/10", dot: "bg-amber-400" },
+    { color: "border-rose-500/40 bg-rose-500/10", dot: "bg-rose-400" },
+  ];
+
   return (
     <div className="space-y-2 p-1">
       <div className="rounded-lg border border-glass-border bg-surface-1 p-3 space-y-2">
@@ -284,9 +381,16 @@ export function ResumeVerifierPreview() {
         </div>
 
         <div className="grid grid-cols-3 gap-1.5">
-          <div className="rounded-md border border-glass-border bg-surface-2 h-5" />
-          <div className="rounded-md border border-glass-border bg-surface-2 h-5" />
-          <div className="rounded-md border border-glass-border bg-surface-2 h-5" />
+          {statuses.map((s, i) => (
+            <div
+              key={i}
+              className={`rounded-md border h-5 flex items-center justify-center transition-all duration-500 ${
+                checks[i] ? s.color : "border-glass-border bg-surface-2"
+              }`}
+            >
+              {checks[i] && <div className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />}
+            </div>
+          ))}
         </div>
 
         <div className="rounded-md border border-glass-border bg-code-bg p-2">
@@ -314,7 +418,6 @@ export function ResumeVerifierPreview() {
 export function ProjectAnalysePreview() {
   const [progress, setProgress] = useState([0, 0, 0, 0]);
   const targets = [88, 74, 92, 61];
-
   const labels = ["Strength", "Originality", "Complexity", "Impact"];
   const colors = [
     "from-fuchsia-500 to-indigo-500",
@@ -327,21 +430,17 @@ export function ProjectAnalysePreview() {
     const timer = setTimeout(() => {
       const intervals: ReturnType<typeof setInterval>[] = [];
       targets.forEach((target, i) => {
-        const delay = i * 200;
         const t = setTimeout(() => {
           const interval = setInterval(() => {
             setProgress((prev) => {
               const next = [...prev];
-              if (next[i] >= target) {
-                clearInterval(interval);
-              } else {
-                next[i] = Math.min(next[i] + 2, target);
-              }
+              if (next[i] >= target) { clearInterval(interval); }
+              else { next[i] = Math.min(next[i] + 2, target); }
               return next;
             });
           }, 18);
           intervals.push(interval);
-        }, delay);
+        }, i * 200);
       });
     }, 400);
     return () => clearTimeout(timer);
@@ -350,12 +449,9 @@ export function ProjectAnalysePreview() {
   return (
     <div className="p-1">
       <div className="rounded-lg border border-glass-border bg-surface-1 p-3 space-y-2.5">
-        {/* Scanning line animation at top */}
         <div className="relative h-1 w-full rounded-full overflow-hidden bg-surface-3">
           <div className="absolute inset-y-0 left-0 w-1/3 bg-linear-to-r from-transparent via-fuchsia-400/60 to-transparent animate-[shimmer_2s_ease-in-out_infinite]" />
         </div>
-
-        {/* Metric bars */}
         {labels.map((label, i) => (
           <div key={label} className="space-y-1">
             <div className="flex items-center justify-between">
@@ -370,8 +466,6 @@ export function ProjectAnalysePreview() {
             </div>
           </div>
         ))}
-
-        {/* Bottom tag row */}
         <div className="flex gap-1 pt-0.5">
           <div className="h-3.5 w-10 rounded-full border border-fuchsia-500/20 bg-fuchsia-500/10" />
           <div className="h-3.5 w-8 rounded-full border border-indigo-500/20 bg-indigo-500/10" />
@@ -382,7 +476,7 @@ export function ProjectAnalysePreview() {
   );
 }
 
-/* ── Job Analyser: Skeleton of the real Job Analyse page ── */
+/* ── Job Analyser: Full self-contained animated preview ── */
 export function JobAnalysePreview() {
   const [score, setScore] = useState(0);
   const [salaryPos, setSalaryPos] = useState(0);
@@ -391,7 +485,6 @@ export function JobAnalysePreview() {
   const targetScore = 68;
 
   useEffect(() => {
-    // Animate score gauge
     const scoreTimer = setTimeout(() => {
       const interval = setInterval(() => {
         setScore((prev) => {
@@ -402,15 +495,8 @@ export function JobAnalysePreview() {
       return () => clearInterval(interval);
     }, 300);
 
-    // Animate salary thumb sliding in
-    const salaryTimer = setTimeout(() => {
-      setSalaryPos(45);
-    }, 800);
-
-    // Reveal gap alerts
+    const salaryTimer = setTimeout(() => setSalaryPos(45), 800);
     const gapTimer = setTimeout(() => setGapsVisible(true), 1200);
-
-    // Reveal interview questions
     const qTimer = setTimeout(() => setQuestionsVisible(true), 1600);
 
     return () => {
@@ -431,15 +517,25 @@ export function JobAnalysePreview() {
   ];
 
   return (
-    <div className="p-1 space-y-1.5">
-      {/* ── Top row: Score + Salary ── */}
-      <div className="grid grid-cols-2 gap-1.5">
+    <div className="space-y-1.5">
+      {/* Market scan header */}
+      <div className="flex justify-between items-center text-[10px] font-mono text-blue-400/80">
+        <span>Market Scan</span>
+        <span className="animate-pulse">{score}% Match</span>
+      </div>
+      <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-linear-to-r from-blue-600 to-indigo-400 transition-all duration-75"
+          style={{ width: `${score}%` }}
+        />
+      </div>
 
+      {/* Score + Salary row */}
+      <div className="grid grid-cols-2 gap-1.5">
         {/* Compatibility Score */}
         <div className="rounded-lg border border-glass-border bg-surface-1 p-2 space-y-1.5">
           <div className="h-[9px] w-20 rounded-full bg-sky-500/20" />
           <div className="flex items-center gap-2">
-            {/* Mini gauge */}
             <div className="relative shrink-0">
               <svg width="52" height="52" viewBox="0 0 52 52" className="-rotate-90">
                 <circle cx="26" cy="26" r="22" fill="none" stroke="var(--surface-4)" strokeWidth="4" />
@@ -465,7 +561,6 @@ export function JobAnalysePreview() {
                 <span className="text-[7px] text-muted-foreground leading-none mt-0.5">MATCH</span>
               </div>
             </div>
-            {/* Skill tags */}
             <div className="flex flex-col gap-1 min-w-0">
               <div className="flex gap-1 flex-wrap">
                 <div className="h-3.5 w-10 rounded-sm border border-emerald-500/30 bg-emerald-500/10" />
@@ -482,13 +577,11 @@ export function JobAnalysePreview() {
         {/* Salary Benchmark */}
         <div className="rounded-lg border border-glass-border bg-surface-1 p-2 space-y-1.5">
           <div className="h-[9px] w-24 rounded-full bg-blue-500/20" />
-          {/* Salary range labels */}
           <div className="flex justify-between">
             <span className="text-[8px] text-muted-foreground">₹6L</span>
             <span className="text-[8px] text-blue-400 font-mono">₹12L</span>
             <span className="text-[8px] text-muted-foreground">₹24L</span>
           </div>
-          {/* Slider track */}
           <div className="relative h-1.5 w-full rounded-full bg-surface-3 overflow-visible">
             <div
               className="absolute inset-y-0 left-0 rounded-full bg-linear-to-r from-blue-600 to-indigo-400 transition-all duration-700 ease-out"
@@ -503,14 +596,12 @@ export function JobAnalysePreview() {
             <span>Entry</span>
             <span>Senior</span>
           </div>
-          {/* Benchmark note */}
           <div className="h-[9px] w-full rounded-full bg-surface-3" />
         </div>
       </div>
 
-      {/* ── Bottom row: Gap Alerts + Interview Sheet ── */}
+      {/* Gap Alerts + Interview Sheet row */}
       <div className="grid grid-cols-2 gap-1.5">
-
         {/* Critical Gap Alerts */}
         <div className="rounded-lg border border-glass-border bg-surface-1 p-2 space-y-1.5">
           <div className="flex items-center gap-1 mb-1">
