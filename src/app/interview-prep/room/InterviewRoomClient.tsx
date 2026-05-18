@@ -336,6 +336,8 @@ export default function InterviewRoomClient() {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const lipSyncAlive = useRef(false);
   const interviewStarted = useRef(false);
+  // Tracks how many interviewer questions have been asked (used for difficulty + question-type scheduling)
+  const questionCount = useRef(0);
 
   const signalRefs = useRef<React.MutableRefObject<AvatarSignal>[]>([
     { current: { isSpeaking: false, amplitude: 0, viseme: "sil" } },
@@ -527,7 +529,11 @@ You are opening a ${config.type} interview for the role of "${config.role || "So
 Generate a natural, professional opening statement and first question appropriate for your role and style.
 Keep it to 2-3 sentences. Be specific to the role and interview type. Do NOT say "certainly" or "sure".
 
-IMPORTANT: The first question MUST be simple and easy — a basic conceptual question the candidate can answer confidently to warm up (e.g. "What is X?", "Can you explain Y in simple terms?"). Do NOT ask a complex or coding question as the opener.
+QUESTION RULES (this is question #1 — the very start of the interview):
+- Type: short-answer conceptual (e.g. "What is X?" or "Define Y in one line.") — no coding, no essays
+- Difficulty: absolute beginner level — a basic definition or "what does X stand for?" style question
+- The candidate should be able to answer in a single sentence
+- Do NOT ask a multi-part or compound question
 
 Respond with just the spoken text, nothing else.`;
 
@@ -583,6 +589,21 @@ Respond with just the spoken text, nothing else.`;
     const lastSpeakerIdx = updatedMessages.filter(m => m.role === "assistant").slice(-1)[0]?.speakerIndex ?? -1;
     const nextInRotation = (lastSpeakerIdx + 1) % interviewerCount;
 
+    // ── Determine question type and difficulty based on question count ──
+    const qNum = questionCount.current + 1; // 1-based number of the question about to be asked
+    const isCodingQuestion   = qNum % 3 === 0;          // every 3rd  → coding
+    const isDescriptiveQuestion = qNum % 5 === 0 && !isCodingQuestion; // every 5th (non-coding) → descriptive
+
+    // Difficulty tier: ramps up gradually every 3 questions
+    const difficultyTier = Math.min(Math.floor((qNum - 1) / 3), 4); // 0–4
+    const difficultyLabel = ["very easy — basic definitions only", "easy — simple conceptual", "medium — requires some depth", "hard — edge cases and trade-offs", "advanced — system design or deep internals"][difficultyTier];
+
+    const questionTypeInstruction = isCodingQuestion
+      ? `QUESTION TYPE: Live coding / pseudocode. Ask the candidate to write or trace through a small, focused piece of code relevant to the role. Keep the problem short enough to solve in ~5 minutes.`
+      : isDescriptiveQuestion
+      ? `QUESTION TYPE: Descriptive / explanatory. Ask the candidate to explain a concept, process, or design decision in a short paragraph (3–5 sentences). Encourage them to give reasoning, not just facts.`
+      : `QUESTION TYPE: Short-answer conceptual. The candidate should be able to answer in ONE sentence or a very short phrase. Ask for a definition, a quick comparison, or a factual "what/why/when" question. Do NOT ask for elaboration or examples unless critical.`;
+
     const prompt = `You are coordinating a ${config.type} interview panel for the role of "${config.role || "Software Engineer"}".${resumeContext}
 
 The interview panel consists of:
@@ -593,21 +614,23 @@ ${history}
 
 The last interviewer who spoke was index ${lastSpeakerIdx}. The next interviewer in rotation is index ${nextInRotation}.
 
-Your task:
-1. DEFAULT: Follow round-robin rotation — the next speaker should be index ${nextInRotation}.
-2. EXCEPTION: Override rotation ONLY if the candidate's answer strongly demands a specific interviewer's expertise. This should happen at most 1 in 4 turns.
-3. Generate what that interviewer should say — one question in their specific style.
+─── QUESTION SCHEDULING (strictly enforce) ───
+This is question #${qNum} in the interview.
+Difficulty level: ${difficultyLabel}
+${questionTypeInstruction}
 
-Rules:
-- Follow round-robin by default — interviewers should take turns evenly
-- Only skip rotation if there is a compelling topical reason
-- Ask ONE focused question, 2-3 sentences max
-- Do NOT repeat previous questions
+─── SPEAKER SELECTION ───
+1. DEFAULT: Follow round-robin rotation — next speaker is index ${nextInRotation}.
+2. EXCEPTION: Override ONLY if the candidate's answer strongly demands a specific interviewer's expertise. Max 1 override per 4 turns.
+
+─── RESPONSE RULES ───
+- Ask exactly ONE question — no compound or multi-part questions
+- 1–2 sentences max (question only, no preamble unless naturally transitioning)
+- Do NOT repeat any previous question
 - Stay in character as the chosen interviewer
-- Question type: mostly short-answer theoretical/conceptual (definitions, trade-offs, how things work). Only ask a live coding question occasionally (~1 in 5). Prefer descriptive over "write code now".
-- Difficulty progression: start easy (basic definitions, simple concepts), gradually increase depth as the conversation progresses. Look at how many exchanges have happened — early on stay surface-level, later rounds can probe deeper or explore edge cases.
+- Do NOT say "certainly", "great answer", "sure", or similar filler
 
-Respond ONLY in this JSON format (no markdown, no code blocks):
+Respond ONLY in this exact JSON format (no markdown, no code blocks):
 {
   "speakerIndex": <0, 1, or 2>,
   "response": "The interviewer's spoken response here"
@@ -622,6 +645,7 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
       const aiText = data.response || "Could you elaborate on that?";
       const speaker = personas[nextIdx];
 
+      questionCount.current += 1; // advance the counter so the next question uses the correct type/difficulty
       setIsThinking(false);
       speakAs(nextIdx, aiText);
       setMessages([...updatedMessages, { role: "assistant", speakerIndex: nextIdx, content: aiText }]);
