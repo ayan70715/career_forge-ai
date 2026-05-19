@@ -1,7 +1,7 @@
 "use client";
 
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
   FolderSearch,
   Loader2,
@@ -187,6 +187,198 @@ export default function ProjectAnalyzerPage() {
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loadingStep, setLoadingStep] = useState("");
 
+  // ── Puter.js CDN loader ──
+  // Never remove the script on cleanup — puter registers "puter-dialog" as a custom element
+  // once globally. Re-injecting causes customElements.define() to throw NotSupportedError.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).puter) return;
+    if (document.querySelector('script[src="https://js.puter.com/v2/"]')) return;
+    const s = document.createElement("script");
+    s.src = "https://js.puter.com/v2/";
+    s.async = true;
+    document.head.appendChild(s);
+  }, []);
+
+  // ── Puter chat helper ──
+  const puterChat = async (prompt: string): Promise<string> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const puter = (window as any).puter;
+    if (!puter?.ai?.chat) throw new Error("Puter not available. Please wait a moment and try again.");
+    const res = await puter.ai.chat(prompt, { model: "gpt-4o-mini" });
+    if (typeof res === "string") return res;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (res as any)?.message?.content ?? (res as any)?.text ?? JSON.stringify(res);
+  };
+
+  // ── GitHub Search API helper (used ONLY in the puter path) ──
+  // Fetches real, verified GitHub repos for a given resume project.
+  // Free, no API key required (unauthenticated rate limit: 10 req/min).
+  const searchGitHubRepos = async (
+    project: ResumeProject,
+    limit = 3
+  ): Promise<SimilarProject[]> => {
+    // Build query from tech stack + meaningful words from description
+    const descWords = project.description
+      .split(/\s+/)
+      .filter((w) => w.length > 4)
+      .slice(0, 4)
+      .join(" ");
+    const techTerms = project.techStack.slice(0, 3).join(" ");
+    const query = encodeURIComponent(`${techTerms} ${descWords}`.trim());
+
+    const res = await fetch(
+      `https://api.github.com/search/repositories?q=${query}&sort=stars&order=desc&per_page=${limit}`,
+      { headers: { Accept: "application/vnd.github+json" } }
+    );
+    if (!res.ok) return [];
+
+    const data = await res.json() as {
+      items: {
+        name: string;
+        html_url: string;
+        description: string | null;
+        stargazers_count: number;
+        forks_count: number;
+        topics: string[];
+        language: string | null;
+      }[];
+    };
+
+    return (data.items || []).map((item) => ({
+      name: item.name,
+      url: item.html_url,
+      description: item.description || "No description available",
+      stars: formatCount(item.stargazers_count),
+      forks: formatCount(item.forks_count),
+      techStack: [
+        ...(item.language ? [item.language] : []),
+        ...item.topics.slice(0, 4),
+      ],
+    }));
+  };
+
+  // ── Full puter-based analysis pipeline ──
+  // Replaces Gemini's grounded flow when no API key is present.
+  //   Step A — extract projects via puter (same prompt as Gemini Step 1)
+  //   Step B — search real GitHub repos per project via GitHub Search API
+  //   Step C — pass real repo data + resume projects to puter for comparison
+  //             (same JSON shape as Gemini's output so the rest of the UI is unchanged)
+  const runWithPuter = async (resumeTextVal: string): Promise<ComparisonResult> => {
+    // ── Step A: Extract projects from resume ──
+    const extractPrompt = `Extract all projects from this resume. For each project return its name, a brief description, and the tech stack used.
+
+RESUME:
+${resumeTextVal}
+
+Respond ONLY in this JSON format (no markdown, no code blocks):
+{
+  "projects": [
+    {
+      "name": "Project Name",
+      "description": "Brief description of what it does",
+      "techStack": ["tech1", "tech2"]
+    }
+  ]
+}`;
+
+    let extractRaw = (await puterChat(extractPrompt)).trim();
+    extractRaw = extractRaw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+    const extractedData = JSON.parse(extractRaw) as { projects: ResumeProject[] };
+    const resumeProjects = extractedData.projects || [];
+
+    if (resumeProjects.length === 0) {
+      throw new Error("No projects found in your resume. Make sure your resume includes a Projects section.");
+    }
+
+    // ── Step B: Fetch real GitHub repos for each project via GitHub Search API ──
+    setLoadingStep(`Found ${resumeProjects.length} project(s). Searching GitHub for real similar repos...`);
+    const githubResultsPerProject = await Promise.all(
+      resumeProjects.map((p) => searchGitHubRepos(p, 3))
+    );
+
+    // Flatten to a deduplicated list of similar projects
+    const seen = new Set<string>();
+    const allSimilarProjects: SimilarProject[] = [];
+    for (const results of githubResultsPerProject) {
+      for (const proj of results) {
+        if (!seen.has(proj.url)) {
+          seen.add(proj.url);
+          allSimilarProjects.push(proj);
+        }
+      }
+    }
+
+    // ── Step C: Ask puter to compare resume projects against the real GitHub repos ──
+    setLoadingStep("Comparing your projects with real-world GitHub repos...");
+    // We inject the real repo data directly into the prompt so puter cannot hallucinate URLs.
+    const projectListText = resumeProjects
+      .map((p, i) => `${i + 1}. ${p.name}: ${p.description} (Tech: ${p.techStack.join(", ")})`)
+      .join("\n");
+
+    const githubContext = allSimilarProjects
+      .map((p, i) =>
+        `${i + 1}. ${p.name} (${p.url})\n   Description: ${p.description}\n   Stars: ${p.stars} | Forks: ${p.forks}\n   Tech: ${p.techStack.join(", ")}`
+      )
+      .join("\n\n");
+
+    const comparePrompt = `You are a senior software engineer reviewing a candidate's resume projects.
+Below are the candidate's resume projects and a list of REAL GitHub repositories (fetched live) that are similar.
+Use ONLY the provided GitHub repos as your similarProjects — do NOT invent or add any others.
+
+RESUME PROJECTS:
+${projectListText}
+
+REAL GITHUB REPOS (use these exactly, do not modify URLs):
+${githubContext}
+
+Analyse how each resume project compares to the most relevant real GitHub repo above.
+
+Respond ONLY in this JSON format (no markdown, no code blocks):
+{
+  "similarProjects": [
+    {
+      "name": "exact name from the GitHub repos list above",
+      "url": "exact url from the GitHub repos list above",
+      "description": "exact description from the GitHub repos list above",
+      "stars": "exact stars from the GitHub repos list above",
+      "forks": "exact forks from the GitHub repos list above",
+      "techStack": ["exact techStack from the GitHub repos list above"]
+    }
+  ],
+  "comparisons": [
+    {
+      "resumeProjectName": "Name from resume",
+      "matchedSimilarProject": "Name of best matching GitHub repo from the list, or null if none fits",
+      "uniquenessScore": <0-100>,
+      "scopeComparison": "One sentence comparing the scope of both projects",
+      "featureOverlap": ["shared feature 1", "shared feature 2"],
+      "differentiators": ["what makes the resume project unique vs the GitHub repo"],
+      "suggestions": ["actionable suggestion to strengthen the project on a resume"],
+      "verdict": "strong | competitive | needs-work"
+    }
+  ],
+  "overallSummary": "2-3 sentence overall assessment of the candidate's projects vs real-world standards"
+}
+
+Uniqueness score guide:
+- 80-100: Highly unique with strong differentiators
+- 50-79: Competitive but similar to existing tools
+- 0-49: Very common, needs more differentiation`;
+
+    let compareRaw = (await puterChat(comparePrompt)).trim();
+    compareRaw = compareRaw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+    const compareData = JSON.parse(compareRaw) as Omit<ComparisonResult, "resumeProjects">;
+
+    return {
+      resumeProjects,
+      similarProjects: compareData.similarProjects || allSimilarProjects,
+      comparisons: compareData.comparisons || [],
+      overallSummary: compareData.overallSummary || "",
+    };
+  };
+
   const clearUpload = () => {
     setResumeFileName(null);
     setResumeSourceType("paste");
@@ -237,8 +429,11 @@ export default function ProjectAnalyzerPage() {
 
   const analyze = async () => {
     const key = getApiKey();
-    if (!key) {
-      setError("Please configure your Gemini API key in Settings first.");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const puterReady = typeof window !== "undefined" && !!(window as any).puter?.ai?.chat;
+
+    if (!key && !puterReady) {
+      setError("AI is still loading. Please wait a moment and try again, or configure a Gemini API key in Settings.");
       return;
     }
     if (!resumeText.trim()) {
@@ -250,6 +445,40 @@ export default function ProjectAnalyzerPage() {
     setError("");
     setResult(null);
 
+    // ── Puter path: no Gemini key — use GitHub Search API + puter ──
+    if (!key) {
+      try {
+        setLoadingStep("Extracting projects from your resume...");
+        const puterResult = await runWithPuter(resumeText);
+
+        // Run URL validation on puter results too (same Step 3 as Gemini path)
+        setLoadingStep("Validating URLs and fetching real GitHub stats...");
+        const validatedProjects = await validateAllProjects(puterResult.similarProjects);
+        const validNames = new Set(validatedProjects.map((p) => p.name));
+        const validatedComparisons = puterResult.comparisons.map((comp) => {
+          if (!comp.matchedSimilarProject || !validNames.has(comp.matchedSimilarProject)) {
+            return { ...comp, matchedSimilarProject: "No verified match found" };
+          }
+          return comp;
+        });
+
+        setResult({
+          resumeProjects: puterResult.resumeProjects,
+          similarProjects: validatedProjects,
+          comparisons: validatedComparisons,
+          overallSummary: puterResult.overallSummary,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Analysis failed. Please try again.";
+        setError(message);
+      } finally {
+        setLoading(false);
+        setLoadingStep("");
+      }
+      return; // done — do not fall through to Gemini path
+    }
+
+    // ── Gemini path (untouched): has API key — use Google Search grounding ──
     try {
       // Step 1: Extract projects from resume (no grounding needed)
       setLoadingStep("Extracting projects from your resume...");
@@ -366,8 +595,33 @@ Uniqueness score guide:
         overallSummary: compareData.overallSummary || "",
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Analysis failed. Please try again.";
-      setError(message);
+      // Gemini failed (quota exceeded, 429, network) — silently fall through to puter path
+      console.warn("[ProjectAnalyzer] Gemini failed, falling back to puter + GitHub Search:", err);
+      try {
+        setLoadingStep("Extracting projects from your resume...");
+        const puterResult = await runWithPuter(resumeText);
+
+        setLoadingStep("Validating URLs and fetching real GitHub stats...");
+        const validatedProjects = await validateAllProjects(puterResult.similarProjects);
+        const validNames = new Set(validatedProjects.map((p) => p.name));
+        const validatedComparisons = puterResult.comparisons.map((comp) => {
+          if (!comp.matchedSimilarProject || !validNames.has(comp.matchedSimilarProject)) {
+            return { ...comp, matchedSimilarProject: "No verified match found" };
+          }
+          return comp;
+        });
+
+        setResult({
+          resumeProjects: puterResult.resumeProjects,
+          similarProjects: validatedProjects,
+          comparisons: validatedComparisons,
+          overallSummary: puterResult.overallSummary,
+        });
+      } catch (puterErr: unknown) {
+        // Both Gemini and puter failed — only now show an error
+        const message = puterErr instanceof Error ? puterErr.message : "Analysis failed. Please try again.";
+        setError(message);
+      }
     } finally {
       setLoading(false);
       setLoadingStep("");
