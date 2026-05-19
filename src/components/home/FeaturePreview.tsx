@@ -577,7 +577,7 @@ export function JobAnalysePreview() {
         <span>Market Scan</span>
         <span className="animate-pulse">{score}% Match</span>
       </div>
-      <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+      <div className="h-1.5 w-full bg-surface-3 rounded-full overflow-hidden">
         <div
           className="h-full bg-linear-to-r from-blue-600 to-indigo-400 transition-all duration-75"
           style={{ width: `${score}%` }}
@@ -642,7 +642,7 @@ export function JobAnalysePreview() {
               style={{ width: `${salaryPos}%` }}
             />
             <div
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3 w-3 rounded-full bg-rose-400 border border-white/20 shadow-[0_0_6px_rgba(244,63,94,0.6)] transition-all duration-700 ease-out"
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3 w-3 rounded-full bg-rose-400 border border-glass-border shadow-[0_0_6px_rgba(244,63,94,0.6)] transition-all duration-700 ease-out"
               style={{ left: `${salaryPos}%` }}
             />
           </div>
