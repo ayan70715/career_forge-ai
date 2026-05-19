@@ -294,7 +294,8 @@ Task: Select at most 3 repos that are genuinely similar in purpose/domain to the
 
 Respond ONLY with a JSON array of 1-based index numbers, e.g. [1, 3] — no explanation, no markdown.`;
 
-    let selectedIndices: number[] = [1]; // safe fallback: top result
+    // null = parse failed (fallback to top result); number[] = puter's explicit selection (may be empty)
+    let selectedIndices: number[] | null = null;
     try {
       const filterRaw = (await puterChat(filterPrompt))
         .trim()
@@ -302,15 +303,19 @@ Respond ONLY with a JSON array of 1-based index numbers, e.g. [1, 3] — no expl
         .replace(/\n?```\s*$/i, "")
         .trim();
       const parsed = JSON.parse(filterRaw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
+        // Respect puter's choice — including an empty array meaning "none are relevant"
         selectedIndices = (parsed as unknown[])
           .filter((n): n is number => typeof n === "number" && n >= 1 && n <= fetchedRepos.length)
           .slice(0, 3);
       }
     } catch {
-      selectedIndices = [1];
+      selectedIndices = null; // parse error — fall back to top result
     }
 
+    // If puter explicitly returned [] (no relevant repos), return empty.
+    // If parse failed (null), fall back to the top-ranked result as a safe default.
+    if (selectedIndices === null) selectedIndices = [1];
     return selectedIndices.map((i) => fetchedRepos[i - 1]).filter(Boolean);
   };
 
@@ -400,16 +405,6 @@ For EACH resume project produce ONE comparison card that covers ALL the relevant
 
 Respond ONLY in this JSON format (no markdown, no code blocks):
 {
-  "similarProjects": [
-    {
-      "name": "exact name from the GitHub repos list above",
-      "url": "exact url from the GitHub repos list above",
-      "description": "exact description from the GitHub repos list above",
-      "stars": "exact stars from the GitHub repos list above",
-      "forks": "exact forks from the GitHub repos list above",
-      "techStack": ["exact techStack from the GitHub repos list above"]
-    }
-  ],
   "comparisons": [
     {
       "resumeProjectName": "Name from resume",
@@ -432,11 +427,12 @@ Uniqueness score guide:
 
     let compareRaw = (await puterChat(comparePrompt)).trim();
     compareRaw = compareRaw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-    const compareData = JSON.parse(compareRaw) as Omit<ComparisonResult, "resumeProjects">;
+    const compareData = JSON.parse(compareRaw) as { comparisons: ComparisonResult["comparisons"]; overallSummary: string };
 
+    // Always use the full allSimilarProjects list — never let puter silently drop repos
     return {
       resumeProjects,
-      similarProjects: compareData.similarProjects || allSimilarProjects,
+      similarProjects: allSimilarProjects,
       comparisons: compareData.comparisons || [],
       overallSummary: compareData.overallSummary || "",
     };
