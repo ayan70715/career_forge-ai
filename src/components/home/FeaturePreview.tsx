@@ -126,22 +126,37 @@ export function EnhancePreview() {
   );
 }
 
-/* ── ATS Checker: Animated gauge ── */
+/* ── ATS Checker: Animated gauge (looping) ── */
 export function ATSPreview() {
   const [score, setScore] = useState(0);
   const target = 92;
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const interval = setInterval(() => {
-        setScore((prev) => {
-          if (prev >= target) { clearInterval(interval); return target; }
-          return prev + 1;
-        });
-      }, 20);
-      return () => clearInterval(interval);
-    }, 500);
-    return () => clearTimeout(timer);
+    let outerTimer: ReturnType<typeof setTimeout>;
+    let interval: ReturnType<typeof setInterval>;
+
+    const runCycle = () => {
+      setScore(0);
+      outerTimer = setTimeout(() => {
+        interval = setInterval(() => {
+          setScore((prev) => {
+            if (prev >= target) {
+              clearInterval(interval);
+              // restart after a pause
+              outerTimer = setTimeout(runCycle, 1800);
+              return target;
+            }
+            return prev + 2;
+          });
+        }, 18);
+      }, 400);
+    };
+
+    runCycle();
+    return () => {
+      clearTimeout(outerTimer);
+      clearInterval(interval);
+    };
   }, []);
 
   const r = 38;
@@ -191,12 +206,20 @@ export function ATSPreview() {
   );
 }
 
-/* ── CV Generator: Document preview ── */
+/* ── CV Generator: Document preview (looping type-in) ── */
 export function CVPreview() {
   const [lineVisible, setLineVisible] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setLineVisible(true), 600);
+    let t: ReturnType<typeof setTimeout>;
+    const cycle = () => {
+      setLineVisible(false);
+      t = setTimeout(() => {
+        setLineVisible(true);
+        t = setTimeout(cycle, 2800);
+      }, 600);
+    };
+    cycle();
     return () => clearTimeout(t);
   }, []);
 
@@ -356,14 +379,26 @@ export function InterviewPreview() {
   );
 }
 
-/* ── Resume Verifier: Mixed test signal ── */
+/* ── Resume Verifier: Mixed test signal (looping) ── */
 export function ResumeVerifierPreview() {
   const [checks, setChecks] = useState([false, false, false]);
 
   useEffect(() => {
-    [0, 1, 2].forEach((i) => {
-      setTimeout(() => setChecks((prev) => { const next = [...prev]; next[i] = true; return next; }), 600 + i * 400);
-    });
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const cycle = () => {
+      setChecks([false, false, false]);
+      [0, 1, 2].forEach((i) => {
+        const t = setTimeout(
+          () => setChecks((prev) => { const next = [...prev]; next[i] = true; return next; }),
+          600 + i * 400
+        );
+        timers.push(t);
+      });
+      const restart = setTimeout(cycle, 3800);
+      timers.push(restart);
+    };
+    cycle();
+    return () => timers.forEach(clearTimeout);
   }, []);
 
   const statuses = [
@@ -427,23 +462,42 @@ export function ProjectAnalysePreview() {
   ];
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const intervals: ReturnType<typeof setInterval>[] = [];
-      targets.forEach((target, i) => {
-        const t = setTimeout(() => {
-          const interval = setInterval(() => {
-            setProgress((prev) => {
-              const next = [...prev];
-              if (next[i] >= target) { clearInterval(interval); }
-              else { next[i] = Math.min(next[i] + 2, target); }
-              return next;
-            });
-          }, 18);
-          intervals.push(interval);
-        }, i * 200);
-      });
-    }, 400);
-    return () => clearTimeout(timer);
+    let outerTimer: ReturnType<typeof setTimeout>;
+    const intervals: ReturnType<typeof setInterval>[] = [];
+
+    const runCycle = () => {
+      setProgress([0, 0, 0, 0]);
+      outerTimer = setTimeout(() => {
+        let doneCount = 0;
+        targets.forEach((target, i) => {
+          const delay = setTimeout(() => {
+            const interval = setInterval(() => {
+              setProgress((prev) => {
+                const next = [...prev];
+                if (next[i] >= target) {
+                  clearInterval(interval);
+                  doneCount++;
+                  if (doneCount === targets.length) {
+                    outerTimer = setTimeout(runCycle, 1600);
+                  }
+                } else {
+                  next[i] = Math.min(next[i] + 2, target);
+                }
+                return next;
+              });
+            }, 18);
+            intervals.push(interval);
+          }, i * 200);
+          intervals.push(delay as unknown as ReturnType<typeof setInterval>);
+        });
+      }, 400);
+    };
+
+    runCycle();
+    return () => {
+      clearTimeout(outerTimer);
+      intervals.forEach((id) => { clearInterval(id); clearTimeout(id as unknown as ReturnType<typeof setTimeout>); });
+    };
   }, []);
 
   return (
