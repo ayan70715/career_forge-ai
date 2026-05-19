@@ -54,11 +54,11 @@ interface ComparisonResult {
   similarProjects: SimilarProject[];
   comparisons: {
     resumeProjectName: string;
-    matchedSimilarProject: string;
+    matchedSimilarProjects: string[];   // 1vN — list of matched project names
     uniquenessScore: number;
     scopeComparison: string;
-    featureOverlap: string[];
-    differentiators: string[];
+    featureOverlap: string[];           // parts already covered by any similar project
+    differentiators: string[];          // what makes the resume project unique vs all of them
     suggestions: string[];
     verdict: "strong" | "competitive" | "needs-work";
   }[];
@@ -213,23 +213,38 @@ export default function ProjectAnalyzerPage() {
   };
 
   // ── GitHub Search API helper (used ONLY in the puter path) ──
-  // Fetches real, verified GitHub repos for a given resume project.
-  // Free, no API key required (unauthenticated rate limit: 10 req/min).
+  // Step 1: Puter generates an optimal, intent-aware GitHub search query for the project.
+  // Step 2: Fetch up to 5 repos from GitHub using that query.
+  // Step 3: Puter picks the top ≤3 genuinely relevant repos (1 is fine if others don't fit).
   const searchGitHubRepos = async (
-    project: ResumeProject,
-    limit = 3
+    project: ResumeProject
   ): Promise<SimilarProject[]> => {
-    // Build query from tech stack + meaningful words from description
-    const descWords = project.description
-      .split(/\s+/)
-      .filter((w) => w.length > 4)
-      .slice(0, 4)
-      .join(" ");
-    const techTerms = project.techStack.slice(0, 3).join(" ");
-    const query = encodeURIComponent(`${techTerms} ${descWords}`.trim());
+    // ── Step 1: Ask puter to generate the optimal GitHub search query ──
+    const queryGenPrompt = `You are a GitHub search expert. Given this resume project, produce the single best GitHub repository search query that would find the most similar real-world projects.
 
+Project name: ${project.name}
+Description: ${project.description}
+Tech stack: ${project.techStack.join(", ")}
+
+Rules:
+- Output ONLY the raw search query string (no surrounding quotes, no explanation, no markdown)
+- Capture the project's core intent and domain, not just its tech keywords
+- Prefer domain-specific terms (e.g. "resume parser nlp" beats "python text processing")
+- Max 8 words
+- Do NOT use GitHub search operators like "language:" or "stars:"`;
+
+    let githubQuery: string;
+    try {
+      githubQuery = (await puterChat(queryGenPrompt)).trim().replace(/^["']|["']$/g, "");
+    } catch {
+      // Fallback to mechanical query if puter fails for this sub-call
+      const descWords = project.description.split(/\s+/).filter((w) => w.length > 4).slice(0, 3).join(" ");
+      githubQuery = `${project.techStack.slice(0, 2).join(" ")} ${descWords}`.trim();
+    }
+
+    // ── Step 2: Fetch up to 5 repos from GitHub ──
     const res = await fetch(
-      `https://api.github.com/search/repositories?q=${query}&sort=stars&order=desc&per_page=${limit}`,
+      `https://api.github.com/search/repositories?q=${encodeURIComponent(githubQuery)}&sort=stars&order=desc&per_page=5`,
       { headers: { Accept: "application/vnd.github+json" } }
     );
     if (!res.ok) return [];
@@ -246,7 +261,7 @@ export default function ProjectAnalyzerPage() {
       }[];
     };
 
-    return (data.items || []).map((item) => ({
+    const fetchedRepos: SimilarProject[] = (data.items || []).map((item) => ({
       name: item.name,
       url: item.html_url,
       description: item.description || "No description available",
@@ -257,6 +272,46 @@ export default function ProjectAnalyzerPage() {
         ...item.topics.slice(0, 4),
       ],
     }));
+
+    if (fetchedRepos.length === 0) return [];
+
+    // ── Step 3: Puter picks the top ≤3 genuinely relevant repos ──
+    const repoListText = fetchedRepos
+      .map((r, i) => `${i + 1}. ${r.name} — ${r.description} (Tech: ${r.techStack.join(", ")})`)
+      .join("\n");
+
+    const filterPrompt = `You are reviewing GitHub repos to find the most relevant matches for a resume project.
+
+Resume project:
+Name: ${project.name}
+Description: ${project.description}
+Tech stack: ${project.techStack.join(", ")}
+
+Candidate GitHub repos fetched from search:
+${repoListText}
+
+Task: Select at most 3 repos that are genuinely similar in purpose/domain to the resume project. Return fewer if most aren't truly related — even just 1 is fine. Only include repos with clear conceptual overlap; skip repos that only share a language or a vague keyword.
+
+Respond ONLY with a JSON array of 1-based index numbers, e.g. [1, 3] — no explanation, no markdown.`;
+
+    let selectedIndices: number[] = [1]; // safe fallback: top result
+    try {
+      const filterRaw = (await puterChat(filterPrompt))
+        .trim()
+        .replace(/^```(?:json)?\s*\n?/i, "")
+        .replace(/\n?```\s*$/i, "")
+        .trim();
+      const parsed = JSON.parse(filterRaw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        selectedIndices = (parsed as unknown[])
+          .filter((n): n is number => typeof n === "number" && n >= 1 && n <= fetchedRepos.length)
+          .slice(0, 3);
+      }
+    } catch {
+      selectedIndices = [1];
+    }
+
+    return selectedIndices.map((i) => fetchedRepos[i - 1]).filter(Boolean);
   };
 
   // ── Full puter-based analysis pipeline ──
@@ -292,11 +347,14 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
       throw new Error("No projects found in your resume. Make sure your resume includes a Projects section.");
     }
 
-    // ── Step B: Fetch real GitHub repos for each project via GitHub Search API ──
-    setLoadingStep(`Found ${resumeProjects.length} project(s). Searching GitHub for real similar repos...`);
-    const githubResultsPerProject = await Promise.all(
-      resumeProjects.map((p) => searchGitHubRepos(p, 3))
-    );
+    // ── Step B: Fetch real GitHub repos for each project via puter-generated queries ──
+    // searchGitHubRepos now runs 3 internal puter calls per project (query gen → fetch → filter),
+    // so we run projects sequentially to stay within GitHub's unauthenticated rate limit.
+    setLoadingStep(`Found ${resumeProjects.length} project(s). Generating search queries and fetching GitHub repos...`);
+    const githubResultsPerProject: SimilarProject[][] = [];
+    for (const p of resumeProjects) {
+      githubResultsPerProject.push(await searchGitHubRepos(p));
+    }
 
     // Flatten to a deduplicated list of similar projects
     const seen = new Set<string>();
@@ -324,8 +382,8 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
       .join("\n\n");
 
     const comparePrompt = `You are a senior software engineer reviewing a candidate's resume projects.
-Below are the candidate's resume projects and a list of REAL GitHub repositories (fetched live) that are similar.
-Use ONLY the provided GitHub repos as your similarProjects — do NOT invent or add any others.
+Below are the candidate's resume projects and REAL GitHub repositories (fetched live) that are similar.
+Use ONLY the provided GitHub repos — do NOT invent or add any others.
 
 RESUME PROJECTS:
 ${projectListText}
@@ -333,7 +391,12 @@ ${projectListText}
 REAL GITHUB REPOS (use these exactly, do not modify URLs):
 ${githubContext}
 
-Analyse how each resume project compares to the most relevant real GitHub repo above.
+For EACH resume project produce ONE comparison card that covers ALL the relevant GitHub repos together (1vN).
+- "matchedSimilarProjects": list the names of ALL GitHub repos that are genuinely relevant to this resume project ([] if none)
+- "featureOverlap": features/capabilities already covered by ANY of the matched repos combined
+- "differentiators": what makes the resume project unique compared to ALL of the matched repos together
+- "scopeComparison": one sentence comparing the resume project's scope against the matched repos as a group
+- "suggestions": actionable tips to strengthen the resume project given what already exists
 
 Respond ONLY in this JSON format (no markdown, no code blocks):
 {
@@ -350,11 +413,11 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
   "comparisons": [
     {
       "resumeProjectName": "Name from resume",
-      "matchedSimilarProject": "Name of best matching GitHub repo from the list, or null if none fits",
+      "matchedSimilarProjects": ["Name of relevant GitHub repo 1", "Name of relevant GitHub repo 2"],
       "uniquenessScore": <0-100>,
-      "scopeComparison": "One sentence comparing the scope of both projects",
-      "featureOverlap": ["shared feature 1", "shared feature 2"],
-      "differentiators": ["what makes the resume project unique vs the GitHub repo"],
+      "scopeComparison": "One sentence comparing the resume project scope vs the group of matched repos",
+      "featureOverlap": ["feature already present in any of the similar repos"],
+      "differentiators": ["what makes the resume project unique vs all matched repos combined"],
       "suggestions": ["actionable suggestion to strengthen the project on a resume"],
       "verdict": "strong | competitive | needs-work"
     }
@@ -456,10 +519,7 @@ Uniqueness score guide:
         const validatedProjects = await validateAllProjects(puterResult.similarProjects);
         const validNames = new Set(validatedProjects.map((p) => p.name));
         const validatedComparisons = puterResult.comparisons.map((comp) => {
-          if (!comp.matchedSimilarProject || !validNames.has(comp.matchedSimilarProject)) {
-            return { ...comp, matchedSimilarProject: "No verified match found" };
-          }
-          return comp;
+          return { ...comp, matchedSimilarProjects: (comp.matchedSimilarProjects || []).filter((n) => validNames.has(n)) };
         });
 
         setResult({
@@ -522,13 +582,20 @@ Resume projects:
 ${projectListText}
 
 STRICT RULES — you MUST follow all of these:
+- For each resume project find at most 3 highly related real projects — fewer is fine (even 1) if more aren't genuinely relevant
 - Only include projects with a REAL, WORKING URL you found via search (GitHub repo, official site, npm, PyPI, etc.)
 - NEVER fabricate, guess, or construct a URL — only use URLs you actually found in live search results
 - NEVER include entries with placeholder names like "(example)", "(generic)", "(commercial)", "(sample)", or any vague category names
-- If you cannot find a real verifiable match for a resume project, set "matchedSimilarProject" to null for that comparison — do NOT invent a fake one
+- If you cannot find a real verifiable match for a resume project, use an empty array for "matchedSimilarProjects" — do NOT invent fake ones
 - For GitHub URLs: use the exact full URL (e.g. https://github.com/owner/repo)
 - For non-GitHub projects: use the real verified homepage URL (official site, npm, PyPI, etc.)
 - Star/fork counts: provide your best estimate from search results for GitHub repos; for non-GitHub set to "N/A"
+
+For EACH resume project produce ONE comparison card covering ALL matched similar projects together (1vN):
+- "matchedSimilarProjects": names of ALL similar projects that are genuinely relevant ([] if none found)
+- "featureOverlap": features already present in ANY of the matched projects combined
+- "differentiators": what makes the resume project unique vs ALL matched projects together
+- "scopeComparison": one sentence comparing the resume project's scope against the matched projects as a group
 
 Respond ONLY in this JSON format (no markdown, no code blocks):
 {
@@ -545,11 +612,11 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
   "comparisons": [
     {
       "resumeProjectName": "Name from resume",
-      "matchedSimilarProject": "Name of best real match found, or null if none",
+      "matchedSimilarProjects": ["Name of real match 1", "Name of real match 2"],
       "uniquenessScore": <0-100>,
-      "scopeComparison": "One sentence comparing the scope of both projects",
-      "featureOverlap": ["shared feature 1", "shared feature 2"],
-      "differentiators": ["what makes the resume project unique"],
+      "scopeComparison": "One sentence comparing the resume project scope vs the group of matched projects",
+      "featureOverlap": ["feature already present in any of the similar projects"],
+      "differentiators": ["what makes the resume project unique vs all matched projects combined"],
       "suggestions": ["actionable suggestion to strengthen the project on a resume"],
       "verdict": "strong | competitive | needs-work"
     }
@@ -580,13 +647,11 @@ Uniqueness score guide:
       // Build set of validated project names for cross-referencing comparisons
       const validNames = new Set(validatedProjects.map((p) => p.name));
 
-      // Update comparisons: if matched project didn't survive validation, mark it clearly
-      const validatedComparisons = (compareData.comparisons || []).map((comp) => {
-        if (!comp.matchedSimilarProject || !validNames.has(comp.matchedSimilarProject)) {
-          return { ...comp, matchedSimilarProject: "No verified match found" };
-        }
-        return comp;
-      });
+      // Update comparisons: filter matchedSimilarProjects to only those that survived URL validation
+      const validatedComparisons = (compareData.comparisons || []).map((comp) => ({
+        ...comp,
+        matchedSimilarProjects: (comp.matchedSimilarProjects || []).filter((n: string) => validNames.has(n)),
+      }));
 
       setResult({
         resumeProjects,
@@ -605,10 +670,7 @@ Uniqueness score guide:
         const validatedProjects = await validateAllProjects(puterResult.similarProjects);
         const validNames = new Set(validatedProjects.map((p) => p.name));
         const validatedComparisons = puterResult.comparisons.map((comp) => {
-          if (!comp.matchedSimilarProject || !validNames.has(comp.matchedSimilarProject)) {
-            return { ...comp, matchedSimilarProject: "No verified match found" };
-          }
-          return comp;
+          return { ...comp, matchedSimilarProjects: (comp.matchedSimilarProjects || []).filter((n) => validNames.has(n)) };
         });
 
         setResult({
@@ -834,9 +896,19 @@ Uniqueness score guide:
                   <Card key={i} className="border-glass-border/80 bg-surface-1/95">
                     <CardContent className="p-5 space-y-4">
                       <div className="flex items-start justify-between gap-2">
-                        <div>
+                        <div className="min-w-0">
                           <h3 className="text-sm font-semibold">{comp.resumeProjectName}</h3>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">vs. {comp.matchedSimilarProject}</p>
+                          {comp.matchedSimilarProjects && comp.matchedSimilarProjects.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {comp.matchedSimilarProjects.map((name, mi) => (
+                                <span key={mi} className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground bg-surface-3/60 border border-glass-border rounded-md px-1.5 py-0.5">
+                                  vs. {name}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground mt-0.5">No verified match found</p>
+                          )}
                         </div>
                         <div className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium ${verdictConfig.bg} ${verdictConfig.color}`}>
                           {verdictConfig.icon}
