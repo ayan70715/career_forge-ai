@@ -309,7 +309,7 @@ export default function HomePage() {
                 <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
                   Real-time salary benchmarking and skill-gap analysis for the Indian tech ecosystem.
                 </p>
-                <div className="flex-1 bg-black/40 rounded-xl p-3 border border-white/5 relative overflow-hidden group-hover:border-blue-500/20 transition-colors min-h-0">
+                <div className="flex-1 bg-surface-1 rounded-xl p-3 border border-glass-border relative overflow-hidden group-hover:border-blue-500/20 transition-colors min-h-0">
                   <JobAnalysePreview />
                 </div>
               </div>
@@ -368,6 +368,34 @@ export default function HomePage() {
                 </p>
               </div>
             </BentoCard>
+          </motion.div>
+
+          {/* ── Row 5 ── 8 AI Tools stat card — centred ── */}
+          <motion.div
+            variants={fadeUp}
+            transition={{ duration: 0.5, delay: 0.07 }}
+            className="lg:col-span-4 flex justify-center"
+          >
+            <div className="w-full max-w-xs min-h-[160px] rounded-2xl border border-glass-border bg-glass-bg backdrop-blur-md p-5 flex flex-col items-center justify-center text-center gap-3">
+              <div className="relative">
+                <div className="absolute inset-0 rounded-full bg-primary/10 blur-xl" />
+                <Cpu className="relative h-9 w-9 text-primary opacity-70" />
+              </div>
+              <div>
+                <div className="text-4xl font-bold text-foreground tabular-nums">8</div>
+                <div className="text-sm text-muted-foreground mt-1">AI-Powered Tools</div>
+                <div className="text-xs text-muted-foreground/60 mt-0.5">Gemini AI Engine</div>
+              </div>
+              <div className="flex gap-1.5 mt-1">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-1 w-1 rounded-full bg-primary/40"
+                    style={{ animationDelay: `${i * 0.1}s` }}
+                  />
+                ))}
+              </div>
+            </div>
           </motion.div>
 
         </div>
