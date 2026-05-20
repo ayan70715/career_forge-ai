@@ -355,7 +355,7 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
     // ── Step B: Fetch real GitHub repos for each project via puter-generated queries ──
     // searchGitHubRepos now runs 3 internal puter calls per project (query gen → fetch → filter),
     // so we run projects sequentially to stay within GitHub's unauthenticated rate limit.
-    setLoadingStep(`Found ${resumeProjects.length} project(s). Generating search queries and fetching GitHub repos...`);
+    setLoadingStep(`Found ${resumeProjects.length} project(s). Searching over the internet for similar work...`);
     const githubResultsPerProject: SimilarProject[][] = [];
     for (const p of resumeProjects) {
       githubResultsPerProject.push(await searchGitHubRepos(p));
